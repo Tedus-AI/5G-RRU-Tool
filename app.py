@@ -284,4 +284,3 @@ c1.metric("整機總熱耗", f"{round(Total_Power, 2)} W")
 c2.metric("系統瓶頸元件", f"{Bottleneck_Name}", delta=f"dT: {round(Min_dT_Allowed, 2)}°C")
 c3.metric("建議鰭片高度", f"{round(Fin_Height, 2)} mm")
 c4.metric("★ 整機估算體積", f"{round(Volume_L, 2)} L")
-```[2026-01-23]
