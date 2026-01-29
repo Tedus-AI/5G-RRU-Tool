@@ -13,7 +13,7 @@ def check_password():
     """如果不正確返回 False，正確返回 True"""
     
     # 設定您的密碼 (您可以修改這裡的 "123456")
-    ACTUAL_PASSWORD = "5g" 
+    ACTUAL_PASSWORD = "tedus" 
     
     def password_entered():
         if st.session_state["password"] == ACTUAL_PASSWORD:
