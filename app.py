@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px # [新增] 引入強大的繪圖庫
 
 # === APP 設定 ===
 st.set_page_config(page_title="5G RRU Thermal Calculator", layout="wide")
@@ -128,7 +129,7 @@ tim_props = {
 }
 
 def apply_excel_formulas(row):
-    # A. Base L/W (讀取側邊欄 Final PA 設定)
+    # A. Base L/W
     if row['Component'] == "Final PA":
         base_l, base_w = Coin_L_Setting, Coin_W_Setting
     elif row['Power(W)'] == 0 or row['Thick(mm)'] == 0:
@@ -185,54 +186,24 @@ else:
     final_df = pd.DataFrame()
 
 # ==================================================
-# 4. 顯示計算結果
+# 4. 顯示計算結果 (含圖表)
 # ==================================================
+st.markdown("---")
 st.markdown("#### 🔒 自動計算結果 (唯讀)")
+st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
+
 if not final_df.empty:
     st.dataframe(
         final_df,
         column_config={
-            "Base_L": st.column_config.NumberColumn(
-                label="Base 長 (mm)", 
-                help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。",
-                format="%.1f"
-            ),
-            "Base_W": st.column_config.NumberColumn(
-                label="Base 寬 (mm)", 
-                help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。",
-                format="%.1f"
-            ),
-            "Loc_Amb": st.column_config.NumberColumn(
-                label="局部環溫 (°C)", 
-                help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。",
-                format="%.1f"
-            ),
-            "R_int": st.column_config.NumberColumn(
-                label="基板熱阻 (°C/W)", 
-                help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。",
-                format="%.5f"
-            ),
-            "R_TIM": st.column_config.NumberColumn(
-                label="介面熱阻 (°C/W)", 
-                help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。",
-                format="%.5f"
-            ),
-            "Drop": st.column_config.NumberColumn(
-                label="內部溫降 (°C)", 
-                help="熱量從晶片核心傳導到散熱器表面的溫差。公式：Power × (Rjc + Rint + Rtim)。",
-                format="%.1f"
-            ),
-            "Allowed_dT": st.column_config.NumberColumn(
-                label="允許溫升 (°C)", 
-                help="散熱器剩餘可用的溫升預算。數值越小代表該元件越容易過熱 (瓶頸)。公式：Limit - Loc_Amb - Drop。",
-                format="%.2f"
-            ),
-            "Total_W": st.column_config.NumberColumn(
-                label="總功耗 (W)", 
-                help="該元件的總發熱量 (單顆功耗 × 數量)。",
-                format="%.1f"
-            ),
-            # 隱藏不需要顯示的原始輸入欄位
+            "Base_L": st.column_config.NumberColumn(label="Base 長 (mm)", help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
+            "Base_W": st.column_config.NumberColumn(label="Base 寬 (mm)", help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
+            "Loc_Amb": st.column_config.NumberColumn(label="局部環溫 (°C)", help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。", format="%.1f"),
+            "R_int": st.column_config.NumberColumn(label="基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.5f"),
+            "R_TIM": st.column_config.NumberColumn(label="介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.5f"),
+            "Drop": st.column_config.NumberColumn(label="內部溫降 (°C)", help="熱量從晶片核心傳導到散熱器表面的溫差。公式：Power × (Rjc + Rint + Rtim)。", format="%.1f"),
+            "Allowed_dT": st.column_config.NumberColumn(label="允許溫升 (°C)", help="散熱器剩餘可用的溫升預算。數值越小代表該元件越容易過熱 (瓶頸)。公式：Limit - Loc_Amb - Drop。", format="%.2f"),
+            "Total_W": st.column_config.NumberColumn(label="總功耗 (W)", help="該元件的總發熱量 (單顆功耗 × 數量)。", format="%.1f"),
             "Pad_L": None, "Pad_W": None, "Thick(mm)": None, 
             "Limit(C)": None, "R_jc": None, "TIM_Type": None, "Board_Type": None, "Height(mm)": None, "Component": None, "Qty": None, "Power(W)": None
         },
@@ -240,12 +211,37 @@ if not final_df.empty:
         hide_index=True
     )
     
-    # 瓶頸元件
-    valid_rows = final_df[final_df['Total_W'] > 0]
+    # 瓶頸計算
+    valid_rows = final_df[final_df['Total_W'] > 0].copy()
     if not valid_rows.empty:
         Total_Watts_Sum = valid_rows['Total_W'].sum()
         Min_dT_Allowed = valid_rows['Allowed_dT'].min()
         Bottleneck_Name = valid_rows.loc[valid_rows['Allowed_dT'].idxmin()]['Component'] if not pd.isna(valid_rows['Allowed_dT'].idxmin()) else "None"
+        
+        # [新增] 視覺化圖表區塊
+        st.markdown("### 📊 視覺化分析")
+        chart_col1, chart_col2 = st.columns(2)
+        
+        with chart_col1:
+            fig_pie = px.pie(valid_rows, values='Total_W', names='Component', title='<b>各元件功耗佔比 (Power Breakdown)</b>', hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with chart_col2:
+            # 排序讓最短的 Bar (瓶頸) 排在最上面
+            valid_rows_sorted = valid_rows.sort_values(by="Allowed_dT", ascending=True)
+            fig_bar = px.bar(
+                valid_rows_sorted, 
+                x='Component', 
+                y='Allowed_dT', 
+                title='<b>各元件剩餘溫升預算 (Thermal Budget)</b>',
+                color='Allowed_dT',
+                color_continuous_scale='RdYlGn', # 紅(危險) -> 綠(安全)
+                labels={'Allowed_dT': '允許溫升 (°C)'}
+            )
+            # 讓 Bar Chart 顯示更直觀
+            fig_bar.update_layout(xaxis_title="元件名稱", yaxis_title="散熱器允許溫升 (°C)")
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
     else:
         Total_Watts_Sum = 0; Min_dT_Allowed = 50; Bottleneck_Name = "None"
 
