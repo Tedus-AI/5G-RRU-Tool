@@ -4,21 +4,19 @@ import numpy as np
 import plotly.express as px
 
 # ==============================================================================
-# 版本：v3.7 (UI Polish)
+# 版本：v3.8 (Visual Upgrade)
 # 日期：2026-01-29
-# 更新：實作美化方案 C (Metric Cards)，將關鍵指標改為彩色卡片樣式
+# 更新：Tab 1 增加功耗能量條，Tab 2 增加熱力圖 (Heatmap) 與條件格式化
 # ==============================================================================
 
 # === APP 設定 ===
 st.set_page_config(page_title="5G RRU Thermal Calculator", layout="wide")
 
 # ==================================================
-# 🔐 密碼保護功能 (Password Protection)
+# 🔐 密碼保護功能
 # ==================================================
 def check_password():
-    """如果不正確返回 False，正確返回 True"""
     ACTUAL_PASSWORD = "tedus"
-    
     def password_entered():
         if st.session_state["password"] == ACTUAL_PASSWORD:
             st.session_state["password_correct"] = True
@@ -46,7 +44,7 @@ if not check_password():
 st.title("📡 5G RRU 體積估算引擎")
 
 # --------------------------------------------------
-# [CSS] 自定義樣式 (用於美化卡片)
+# [CSS] 自定義樣式 (Metric Cards)
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -59,27 +57,14 @@ st.markdown("""
         border-left: 5px solid #333;
         text-align: center;
     }
-    .kpi-title {
-        color: #666;
-        font-size: 0.9rem;
-        font-weight: 500;
-        margin-bottom: 5px;
-    }
-    .kpi-value {
-        color: #333;
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin-bottom: 5px;
-    }
-    .kpi-desc {
-        color: #888;
-        font-size: 0.8rem;
-    }
+    .kpi-title { color: #666; font-size: 0.9rem; font-weight: 500; margin-bottom: 5px; }
+    .kpi-value { color: #333; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; }
+    .kpi-desc { color: #888; font-size: 0.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==================================================
-# 1. 側邊欄：全域邊界條件
+# 1. 側邊欄：全域參數
 # ==================================================
 st.sidebar.header("🛠️ 全域參數設定")
 
@@ -87,7 +72,7 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     T_amb = st.number_input("環境溫度 (°C)", value=45.0, step=1.0)
     h_value = st.number_input("自然對流係數 h (W/m2K)", value=8.8, step=0.1)
     Margin = st.number_input("設計安全係數 (Margin)", value=1.0, step=0.1)
-    Slope = 0.03 # 空氣升溫梯度
+    Slope = 0.03 
     Eff = st.number_input("鰭片效率 (Eff)", value=0.95, step=0.01)
 
 with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
@@ -99,15 +84,14 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
     
     st.markdown("---")
     st.caption("Final PA 專用銅塊尺寸")
-    c_coin_1, c_coin_2 = st.columns(2)
-    Coin_L_Setting = c_coin_1.number_input("銅塊長 (mm)", value=55.0, step=1.0)
-    Coin_W_Setting = c_coin_2.number_input("銅塊寬 (mm)", value=35.0, step=1.0)
+    c1, c2 = st.columns(2)
+    Coin_L_Setting = c1.number_input("銅塊長 (mm)", value=55.0, step=1.0)
+    Coin_W_Setting = c2.number_input("銅塊寬 (mm)", value=35.0, step=1.0)
 
 with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c1, c2 = st.columns(2)
     K_Via = c1.number_input("Via 等效 K值", value=30.0)
     Via_Eff = c2.number_input("Via 製程係數", value=0.9)
-    
     st.markdown("---") 
     st.caption("熱介面材料 (TIM)")
     c3, c4 = st.columns(2)
@@ -119,7 +103,6 @@ with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c7, c8 = st.columns(2)
     K_Grease = c7.number_input("K (Grease)", value=3.0)
     t_Grease = c8.number_input("t (Grease)", value=0.05, format="%.3f")
-    
     st.markdown("---") 
     st.markdown("**Solder (錫片)**") 
     c9, c10 = st.columns(2)
@@ -134,18 +117,15 @@ with st.sidebar.expander("4. 鰭片幾何", expanded=False):
 Top, Btm, Left, Right = 11, 13, 11, 11
 
 # ==================================================
-# 3. 建立分頁 (Tabs)
+# 3. 分頁與邏輯
 # ==================================================
 tab_input, tab_data, tab_viz = st.tabs(["📝 元件清單設定", "🔢 詳細計算數據", "📊 視覺化分析結果"])
 
-# ==================================================
-# Tab 1: 輸入介面
-# ==================================================
+# --- Tab 1: 輸入介面 (美化版) ---
 with tab_input:
     st.subheader("🔥 元件熱源清單設定")
-    st.caption("💡 **提示：請在此編輯元件參數，修改後可切換至「詳細數據」或「視覺化結果」查看報告。**")
+    st.caption("💡 **提示：請在此編輯元件參數。功耗欄位已視覺化，方便快速識別高熱元件。**")
 
-    # 1. 定義初始資料
     input_data = {
         "Component": ["Final PA", "Driver PA", "Pre Driver", "Circulator", "Cavity Filter", "CPU (FPGA)", "Si5518", "16G DDR", "Power Mod", "SFP"],
         "Qty": [4, 4, 4, 4, 1, 1, 1, 2, 1, 1],
@@ -159,33 +139,36 @@ with tab_input:
         "R_jc": [1.50, 1.70, 50.0, 0.0, 0.0, 0.16, 0.50, 0.0, 0.0, 0.0],
         "TIM_Type": ["Solder", "Grease", "Grease", "Grease", "None", "Putty", "Pad", "Grease", "Grease", "Grease"]
     }
-
     df_input = pd.DataFrame(input_data)
 
     edited_df = st.data_editor(
         df_input,
         column_config={
-            "Component": st.column_config.TextColumn(label="元件名稱", help="元件型號或代號 (如 PA, FPGA)", disabled=False),
-            "Qty": st.column_config.NumberColumn(label="數量", help="該元件的使用數量", min_value=0, step=1, width="small"),
-            "Power(W)": st.column_config.NumberColumn(label="單顆功耗 (W)", help="單一顆元件的發熱瓦數 (TDP)", format="%.2f"),
-            "Height(mm)": st.column_config.NumberColumn(label="元件高度 (mm)", help="元件距離 PCB 底部的垂直高度。高度越高，局部環溫 (Local Amb) 越高。", format="%.1f"),
-            "Pad_L": st.column_config.NumberColumn(label="Pad 長 (mm)", help="元件底部散熱焊盤 (Thermal Pad) 的長度"),
-            "Pad_W": st.column_config.NumberColumn(label="Pad 寬 (mm)", help="元件底部散熱焊盤 (Thermal Pad) 的寬度"),
-            "Thick(mm)": st.column_config.NumberColumn(label="基板厚度 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
-            "Board_Type": st.column_config.SelectboxColumn(label="基板導通", help="PCB 垂直導熱的方式。Thermal Via (K=30) 或 Copper Coin (K=380)", options=["Thermal Via", "Copper Coin", "None"], required=True, width="medium"),
-            "TIM_Type": st.column_config.SelectboxColumn(label="介面材料", help="元件與散熱器之間的接觸介質 (如導熱膏、墊片)", options=["Solder", "Grease", "Pad", "Putty", "None"], required=True, width="medium"),
-            "R_jc": st.column_config.NumberColumn(label="熱阻 Rjc", help="結點到殼 (Junction to Case) 的內部熱阻值", format="%.2f"),
-            "Limit(C)": st.column_config.NumberColumn(label="限溫 (°C)", help="元件允許的最高運作溫度 (Tj 或 Tc)", format="%.1f")
+            "Component": st.column_config.TextColumn(label="元件名稱", help="元件型號或代號", width="medium"),
+            "Qty": st.column_config.NumberColumn(label="數量", min_value=0, step=1, width="small"),
+            # [美化] 將功耗變成進度條，最大值設為 100W (可視需求調整)
+            "Power(W)": st.column_config.ProgressColumn(
+                label="單顆功耗 (W)", 
+                help="單一顆元件的發熱瓦數 (TDP)", 
+                format="%.2f W", 
+                min_value=0, 
+                max_value=100 
+            ),
+            "Height(mm)": st.column_config.NumberColumn(label="元件高度 (mm)", help="元件距離 PCB 底部的垂直高度", format="%.1f"),
+            "Pad_L": st.column_config.NumberColumn(label="Pad 長 (mm)", help="元件底部散熱焊盤長度"),
+            "Pad_W": st.column_config.NumberColumn(label="Pad 寬 (mm)", help="元件底部散熱焊盤寬度"),
+            "Thick(mm)": st.column_config.NumberColumn(label="基板厚度 (mm)", help="PCB 或銅塊厚度", format="%.1f"),
+            "Board_Type": st.column_config.SelectboxColumn(label="基板導通", help="PCB 垂直導熱方式", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
+            "TIM_Type": st.column_config.SelectboxColumn(label="介面材料", help="接觸介質類型", options=["Solder", "Grease", "Pad", "Putty", "None"], width="medium"),
+            "R_jc": st.column_config.NumberColumn(label="熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
+            "Limit(C)": st.column_config.NumberColumn(label="限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
         },
         num_rows="dynamic",
         use_container_width=True,
         key="editor"
     )
 
-# ==================================================
-# 後台邏輯運算
-# ==================================================
-
+# --- 後台運算 ---
 tim_props = {
     "Solder": {"k": K_Solder, "t": t_Solder},
     "Grease": {"k": K_Grease, "t": t_Grease},
@@ -195,13 +178,9 @@ tim_props = {
 }
 
 def apply_excel_formulas(row):
-    if row['Component'] == "Final PA":
-        base_l, base_w = Coin_L_Setting, Coin_W_Setting
-    elif row['Power(W)'] == 0 or row['Thick(mm)'] == 0:
-        base_l, base_w = 0.0, 0.0
-    else:
-        base_l = row['Pad_L'] + row['Thick(mm)']
-        base_w = row['Pad_W'] + row['Thick(mm)']
+    if row['Component'] == "Final PA": base_l, base_w = Coin_L_Setting, Coin_W_Setting
+    elif row['Power(W)'] == 0 or row['Thick(mm)'] == 0: base_l, base_w = 0.0, 0.0
+    else: base_l, base_w = row['Pad_L'] + row['Thick(mm)'], row['Pad_W'] + row['Thick(mm)']
         
     loc_amb = T_amb + (row['Height(mm)'] * Slope)
     
@@ -215,27 +194,19 @@ def apply_excel_formulas(row):
     if k_board > 0 and pad_area > 0:
         eff_area = np.sqrt(pad_area * base_area) if base_area > 0 else pad_area
         r_int_val = (row['Thick(mm)']/1000) / (k_board * eff_area)
-        
-        if row['Component'] == "Final PA":
-            r_int = r_int_val + ((t_Solder/1000) / (K_Solder * pad_area * Voiding))
-        elif row['Board_Type'] == "Thermal Via":
-            r_int = r_int_val / Via_Eff
-        else:
-            r_int = r_int_val
-    else:
-        r_int = 0
+        if row['Component'] == "Final PA": r_int = r_int_val + ((t_Solder/1000) / (K_Solder * pad_area * Voiding))
+        elif row['Board_Type'] == "Thermal Via": r_int = r_int_val / Via_Eff
+        else: r_int = r_int_val
+    else: r_int = 0
         
     tim = tim_props.get(row['TIM_Type'], {"k":1, "t":0})
     target_area = base_area if base_area > 0 else pad_area
-    if target_area > 0 and tim['t'] > 0:
-        r_tim = (tim['t']/1000) / (tim['k'] * target_area)
-    else:
-        r_tim = 0
+    if target_area > 0 and tim['t'] > 0: r_tim = (tim['t']/1000) / (tim['k'] * target_area)
+    else: r_tim = 0
         
     total_w = row['Qty'] * row['Power(W)']
     drop = row['Power(W)'] * (row['R_jc'] + r_int + r_tim)
     allowed_dt = row['Limit(C)'] - drop - loc_amb
-    
     return pd.Series([base_l, base_w, loc_amb, r_int, r_tim, total_w, drop, allowed_dt])
 
 if not edited_df.empty:
@@ -245,7 +216,7 @@ if not edited_df.empty:
 else:
     final_df = pd.DataFrame()
 
-# 全域變數計算
+# 變數計算
 valid_rows = final_df[final_df['Total_W'] > 0].copy()
 if not valid_rows.empty:
     Total_Watts_Sum = valid_rows['Total_W'].sum()
@@ -254,8 +225,7 @@ if not valid_rows.empty:
 else:
     Total_Watts_Sum = 0; Min_dT_Allowed = 50; Bottleneck_Name = "None"
 
-L_hsk = L_pcb + Top + Btm
-W_hsk = W_pcb + Left + Right
+L_hsk, W_hsk = L_pcb + Top + Btm, W_pcb + Left + Right
 Fin_Count = W_hsk / (Gap + Fin_t)
 
 Total_Power = Total_Watts_Sum * Margin
@@ -263,33 +233,41 @@ if Total_Power > 0 and Min_dT_Allowed > 0:
     R_sa = Min_dT_Allowed / Total_Power
     Area_req = 1 / (h_value * R_sa * Eff)
     Base_Area_m2 = (L_hsk * W_hsk) / 1e6
-    try:
-        Fin_Height = ((Area_req - Base_Area_m2) * 1e6) / (2 * Fin_Count * L_hsk)
+    try: Fin_Height = ((Area_req - Base_Area_m2) * 1e6) / (2 * Fin_Count * L_hsk)
     except: Fin_Height = 0
     RRU_Height = t_base + Fin_Height + H_shield + H_filter
     Volume_L = (L_hsk * W_hsk * RRU_Height) / 1e6
 else:
     R_sa = 0; Area_req = 0; Fin_Height = 0; RRU_Height = 0; Volume_L = 0
 
-# ==================================================
-# Tab 2: 詳細數據 (唯讀表)
-# ==================================================
+# --- Tab 2: 詳細數據 (美化版 - 熱力圖) ---
 with tab_data:
     st.subheader("🔢 詳細計算數據 (唯讀)")
-    st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
+    st.caption("💡 **提示：Allowed_dT 欄位使用熱力圖顯示（紅=低/危險，綠=高/安全）。**")
     
     if not final_df.empty:
+        # [美化] 使用 Pandas Styler 製作熱力圖
+        styled_df = final_df.style.background_gradient(
+            subset=['Allowed_dT'], 
+            cmap='RdYlGn',  # 紅->黃->綠
+            vmin=0, vmax=50 # 設定顏色範圍，避免極端值破壞漸層
+        ).format({
+            "Base_L": "{:.1f}", "Base_W": "{:.1f}", "Loc_Amb": "{:.1f}",
+            "R_int": "{:.5f}", "R_TIM": "{:.5f}", "Drop": "{:.1f}",
+            "Allowed_dT": "{:.2f}", "Total_W": "{:.1f}"
+        })
+
         st.dataframe(
-            final_df,
+            styled_df, # 注意：這裡傳入的是有 Style 的物件
             column_config={
-                "Base_L": st.column_config.NumberColumn(label="Base 長 (mm)", help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
-                "Base_W": st.column_config.NumberColumn(label="Base 寬 (mm)", help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
-                "Loc_Amb": st.column_config.NumberColumn(label="局部環溫 (°C)", help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。", format="%.1f"),
-                "R_int": st.column_config.NumberColumn(label="基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.5f"),
-                "R_TIM": st.column_config.NumberColumn(label="介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.5f"),
-                "Drop": st.column_config.NumberColumn(label="內部溫降 (°C)", help="熱量從晶片核心傳導到散熱器表面的溫差。公式：Power × (Rjc + Rint + Rtim)。", format="%.1f"),
-                "Allowed_dT": st.column_config.NumberColumn(label="允許溫升 (°C)", help="散熱器剩餘可用的溫升預算。數值越小代表該元件越容易過熱 (瓶頸)。公式：Limit - Loc_Amb - Drop。", format="%.2f"),
-                "Total_W": st.column_config.NumberColumn(label="總功耗 (W)", help="該元件的總發熱量 (單顆功耗 × 數量)。", format="%.1f"),
+                "Base_L": st.column_config.NumberColumn(label="Base 長 (mm)", help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。"),
+                "Base_W": st.column_config.NumberColumn(label="Base 寬 (mm)", help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。"),
+                "Loc_Amb": st.column_config.NumberColumn(label="局部環溫 (°C)", help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。"),
+                "R_int": st.column_config.NumberColumn(label="基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。"),
+                "R_TIM": st.column_config.NumberColumn(label="介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。"),
+                "Drop": st.column_config.NumberColumn(label="內部溫降 (°C)", help="熱量從晶片核心傳導到散熱器表面的溫差。公式：Power × (Rjc + Rint + Rtim)。"),
+                "Allowed_dT": st.column_config.NumberColumn(label="允許溫升 (°C)", help="散熱器剩餘可用的溫升預算。數值越小代表該元件越容易過熱 (瓶頸)。公式：Limit - Loc_Amb - Drop。"),
+                "Total_W": st.column_config.NumberColumn(label="總功耗 (W)", help="該元件的總發熱量 (單顆功耗 × 數量)。"),
                 "Pad_L": None, "Pad_W": None, "Thick(mm)": None, 
                 "Limit(C)": None, "R_jc": None, "TIM_Type": None, "Board_Type": None, "Height(mm)": None, "Component": None, "Qty": None, "Power(W)": None
             },
@@ -297,75 +275,50 @@ with tab_data:
             hide_index=True
         )
 
-# ==================================================
-# Tab 3: 視覺化與最終結果 (儀表板 - 美化版)
-# ==================================================
+# --- Tab 3: 視覺化報告 ---
 with tab_viz:
     st.subheader("📊 熱流分析報告")
     
-    # 1. 關鍵指標 (KPI Cards - 美化版)
-    k1, k2, k3, k4 = st.columns(4)
-    
-    # 定義卡片產生函數
     def card(col, title, value, desc, color="#333"):
         col.markdown(f"""
         <div class="kpi-card" style="border-left: 5px solid {color};">
             <div class="kpi-title">{title}</div>
             <div class="kpi-value">{value}</div>
             <div class="kpi-desc">{desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        </div>""", unsafe_allow_html=True)
 
-    # 顯示卡片 (顏色對應：紅=熱, 橘=警示, 藍=面積, 紫=數量)
+    k1, k2, k3, k4 = st.columns(4)
     card(k1, "整機總熱耗", f"{round(Total_Power, 2)} W", "Total Power", "#e74c3c")
     card(k2, "系統瓶頸元件", f"{Bottleneck_Name}", f"dT: {round(Min_dT_Allowed, 2)}°C", "#f39c12")
     card(k3, "所需散熱面積", f"{round(Area_req, 3)} m²", "Required Area", "#3498db")
     card(k4, "預估鰭片數量", f"{int(Fin_Count)} Pcs", "Fin Count", "#9b59b6")
 
-    st.markdown("<br>", unsafe_allow_html=True) # 增加一點間距
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. 圖表區
     if not valid_rows.empty:
-        chart_col1, chart_col2 = st.columns(2)
-        with chart_col1:
+        c1, c2 = st.columns(2)
+        with c1:
             fig_pie = px.pie(valid_rows, values='Total_W', names='Component', title='<b>各元件功耗佔比 (Power Breakdown)</b>', hole=0.4)
             st.plotly_chart(fig_pie, use_container_width=True)
-            
-        with chart_col2:
+        with c2:
             valid_rows_sorted = valid_rows.sort_values(by="Allowed_dT", ascending=True)
             fig_bar = px.bar(
-                valid_rows_sorted, 
-                x='Component', 
-                y='Allowed_dT', 
+                valid_rows_sorted, x='Component', y='Allowed_dT', 
                 title='<b>各元件剩餘溫升預度 (Thermal Budget)</b>',
-                color='Allowed_dT',
-                color_continuous_scale='RdYlGn',
+                color='Allowed_dT', color_continuous_scale='RdYlGn',
                 labels={'Allowed_dT': '允許溫升 (°C)'}
             )
             fig_bar.update_layout(xaxis_title="元件名稱", yaxis_title="散熱器允許溫升 (°C)")
             st.plotly_chart(fig_bar, use_container_width=True)
 
     st.markdown("---")
-
-    # 3. 尺寸與體積 Highlight
     st.subheader("📏 尺寸與體積估算")
-    
     c5, c6 = st.columns(2)
-    # 使用相同的卡片樣式
     card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
     card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
 
-    # 最終體積大卡片
     st.markdown(f"""
-    <div style="
-        background-color: #e6fffa; 
-        padding: 30px; 
-        margin-top: 20px;
-        border-radius: 15px; 
-        border-left: 10px solid #00b894; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        text-align: center;
-    ">
+    <div style="background-color: #e6fffa; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid #00b894; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
         <h3 style="color: #006266; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3>
         <h1 style="color: #00b894; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{round(Volume_L, 2)} L</h1>
     </div>
