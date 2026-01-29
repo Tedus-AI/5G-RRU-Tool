@@ -6,6 +6,53 @@ import plotly.express as px
 # === APP 設定 ===
 st.set_page_config(page_title="5G RRU Thermal Calculator", layout="wide")
 
+# ==========================================
+# 🔐 密碼保護功能 (Password Protection)
+# ==========================================
+def check_password():
+    """如果不正確返回 False，正確返回 True"""
+    
+    # 設定您的密碼 (您可以修改這裡的 "123456")
+    ACTUAL_PASSWORD = "5g" 
+    
+    def password_entered():
+        if st.session_state["password"] == ACTUAL_PASSWORD:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # 不要在 session 中保留密碼明文
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # 第一次進入，顯示輸入框
+        st.text_input("🔒 請輸入存取密碼 (Password)", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # 密碼錯誤，再次顯示輸入框
+        st.text_input("🔒 請輸入存取密碼 (Password)", type="password", on_change=password_entered, key="password")
+        st.error("❌ 密碼錯誤，請重試")
+        return False
+    else:
+        # 密碼正確
+        return True
+
+if not check_password():
+    st.stop()  # ⛔ 如果沒通過驗證，程式直接在這裡停止，不執行下方內容
+
+# ==========================================
+# 👇 以下是原本的主程式 (完全不用動)
+# ==========================================
+
+st.title("📡 5G RRU 體積估算引擎")
+
+# ... (接續原本 v3.6 的所有程式碼) ...
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+
+# === APP 設定 ===
+st.set_page_config(page_title="5G RRU Thermal Calculator", layout="wide")
+
 st.title("📡 5G RRU 體積估算引擎")
 
 # ==================================================
