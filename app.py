@@ -75,8 +75,8 @@ Top, Btm, Left, Right = 11, 13, 11, 11
 # ==================================================
 # 3. 建立分頁 (Tabs)
 # ==================================================
-# 這裡定義了三個主要分頁
-tab_input, tab_viz, tab_data = st.tabs(["📝 元件清單設定", "📊 視覺化分析結果", "🔢 詳細計算數據"])
+# [修改重點] 調整分頁順序： 1.輸入 -> 2.詳細數據 -> 3.視覺化報告
+tab_input, tab_data, tab_viz = st.tabs(["📝 元件清單設定", "🔢 詳細計算數據", "📊 視覺化分析結果"])
 
 
 # ==================================================
@@ -84,7 +84,7 @@ tab_input, tab_viz, tab_data = st.tabs(["📝 元件清單設定", "📊 視覺�
 # ==================================================
 with tab_input:
     st.subheader("🔥 元件熱源清單設定")
-    st.caption("💡 **提示：請在此編輯元件參數，修改後切換至「視覺化分析結果」查看報告。**")
+    st.caption("💡 **提示：請在此編輯元件參數，修改後可切換至「詳細數據」或「視覺化結果」查看報告。**")
 
     # 1. 定義初始資料
     input_data = {
@@ -221,7 +221,33 @@ else:
 
 
 # ==================================================
-# Tab 2: 視覺化與最終結果 (儀表板)
+# Tab 2: 詳細數據 (唯讀表) - [已移至第二順位]
+# ==================================================
+with tab_data:
+    st.subheader("🔢 詳細計算數據 (唯讀)")
+    st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
+    
+    if not final_df.empty:
+        st.dataframe(
+            final_df,
+            column_config={
+                "Base_L": st.column_config.NumberColumn(label="Base 長 (mm)", help="熱量擴散後的底部有效長度", format="%.1f"),
+                "Base_W": st.column_config.NumberColumn(label="Base 寬 (mm)", help="熱量擴散後的底部有效寬度", format="%.1f"),
+                "Loc_Amb": st.column_config.NumberColumn(label="局部環溫 (°C)", help="該元件高度處的環境溫度", format="%.1f"),
+                "R_int": st.column_config.NumberColumn(label="基板熱阻 (°C/W)", help="元件穿過 PCB 或銅塊的熱阻", format="%.5f"),
+                "R_TIM": st.column_config.NumberColumn(label="介面熱阻 (°C/W)", help="TIM 材料接觸熱阻", format="%.5f"),
+                "Drop": st.column_config.NumberColumn(label="內部溫降 (°C)", help="熱量從晶片核心傳導到散熱器表面的溫差", format="%.1f"),
+                "Allowed_dT": st.column_config.NumberColumn(label="允許溫升 (°C)", help="散熱器剩餘可用的溫升預算", format="%.2f"),
+                "Total_W": st.column_config.NumberColumn(label="總功耗 (W)", help="該元件的總發熱量", format="%.1f"),
+                "Pad_L": None, "Pad_W": None, "Thick(mm)": None, 
+                "Limit(C)": None, "R_jc": None, "TIM_Type": None, "Board_Type": None, "Height(mm)": None, "Component": None, "Qty": None, "Power(W)": None
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+# ==================================================
+# Tab 3: 視覺化與最終結果 (儀表板) - [已移至第三順位]
 # ==================================================
 with tab_viz:
     st.subheader("📊 熱流分析報告")
@@ -278,30 +304,3 @@ with tab_viz:
         <h1 style="color: #00b894; margin:10px 0; font-size: 3.5rem;">{round(Volume_L, 2)} L</h1>
     </div>
     """, unsafe_allow_html=True)
-
-
-# ==================================================
-# Tab 3: 詳細數據 (唯讀表)
-# ==================================================
-with tab_data:
-    st.subheader("🔢 詳細計算數據 (唯讀)")
-    st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
-    
-    if not final_df.empty:
-        st.dataframe(
-            final_df,
-            column_config={
-                "Base_L": st.column_config.NumberColumn(label="Base 長 (mm)", help="熱量擴散後的底部有效長度", format="%.1f"),
-                "Base_W": st.column_config.NumberColumn(label="Base 寬 (mm)", help="熱量擴散後的底部有效寬度", format="%.1f"),
-                "Loc_Amb": st.column_config.NumberColumn(label="局部環溫 (°C)", help="該元件高度處的環境溫度", format="%.1f"),
-                "R_int": st.column_config.NumberColumn(label="基板熱阻 (°C/W)", help="元件穿過 PCB 或銅塊的熱阻", format="%.5f"),
-                "R_TIM": st.column_config.NumberColumn(label="介面熱阻 (°C/W)", help="TIM 材料接觸熱阻", format="%.5f"),
-                "Drop": st.column_config.NumberColumn(label="內部溫降 (°C)", help="熱量從晶片核心傳導到散熱器表面的溫差", format="%.1f"),
-                "Allowed_dT": st.column_config.NumberColumn(label="允許溫升 (°C)", help="散熱器剩餘可用的溫升預算", format="%.2f"),
-                "Total_W": st.column_config.NumberColumn(label="總功耗 (W)", help="該元件的總發熱量", format="%.1f"),
-                "Pad_L": None, "Pad_W": None, "Thick(mm)": None, 
-                "Limit(C)": None, "R_jc": None, "TIM_Type": None, "Board_Type": None, "Height(mm)": None, "Component": None, "Qty": None, "Power(W)": None
-            },
-            use_container_width=True,
-            hide_index=True
-        )
