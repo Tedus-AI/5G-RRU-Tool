@@ -21,15 +21,22 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     Eff = st.number_input("鰭片效率 (Eff)", value=0.95, step=0.01)
 
 # 機構參數
-with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=False):
+with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True): # 展開此區塊以便設定銅塊
     L_pcb = st.number_input("PCB 長度 (mm)", value=350)
     W_pcb = st.number_input("PCB 寬度 (mm)", value=250)
     t_base = st.number_input("散熱器基板厚 (mm)", value=7)
     H_shield = st.number_input("HSK內腔深度 (mm)", value=20)
     H_filter = st.number_input("Cavity Filter 厚度 (mm)", value=42)
+    
+    # [新增功能] Final PA 銅塊尺寸設定
+    st.markdown("---")
+    st.caption("Final PA 專用銅塊尺寸")
+    c_coin_1, c_coin_2 = st.columns(2)
+    Coin_L_Setting = c_coin_1.number_input("銅塊長 (mm)", value=55.0, step=1.0)
+    Coin_W_Setting = c_coin_2.number_input("銅塊寬 (mm)", value=35.0, step=1.0)
 
 # 材料參數
-with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=True):
+with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c1, c2 = st.columns(2)
     K_Via = c1.number_input("Via 等效 K值", value=30.0)
     Via_Eff = c2.number_input("Via 製程係數", value=0.9)
@@ -88,7 +95,6 @@ input_data = {
 df_input = pd.DataFrame(input_data)
 
 # 2. 顯示編輯器
-# [修改重點] R_int 與 R_TIM 格式改為 %.5f 以顯示微小數值
 edited_df = st.data_editor(
     df_input,
     column_config={
@@ -122,12 +128,14 @@ tim_props = {
 }
 
 def apply_excel_formulas(row):
-    # A. Base L/W
+    # A. Base L/W (幾何計算)
+    # [修改重點] 改為讀取側邊欄變數，不再寫死 55/35
     if row['Component'] == "Final PA":
-        base_l, base_w = 55.0, 35.0
+        base_l, base_w = Coin_L_Setting, Coin_W_Setting
     elif row['Power(W)'] == 0 or row['Thick(mm)'] == 0:
         base_l, base_w = 0.0, 0.0
     else:
+        # 其他元件依照公式計算
         base_l = row['Pad_L'] + row['Thick(mm)']
         base_w = row['Pad_W'] + row['Thick(mm)']
         
@@ -188,7 +196,6 @@ if not final_df.empty:
         column_config={
             "Base_L": st.column_config.NumberColumn("Base L", format="%.1f"),
             "Base_W": st.column_config.NumberColumn("Base W", format="%.1f"),
-            # [修改重點] 格式改為 %.5f
             "R_int": st.column_config.NumberColumn("R_int", format="%.5f"),
             "R_TIM": st.column_config.NumberColumn("R_TIM", format="%.5f"),
             "Drop": st.column_config.NumberColumn("Drop", format="%.1f"),
