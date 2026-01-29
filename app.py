@@ -318,4 +318,12 @@ with tab_viz:
     st.markdown("---")
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
-    card(c5, "建議鰭片高度",
+    card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
+    card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
+
+    st.markdown(f"""
+    <div style="background-color: #e6fffa; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid #00b894; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
+        <h3 style="color: #006266; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3>
+        <h1 style="color: #00b894; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{round(Volume_L, 2)} L</h1>
+    </div>
+    """, unsafe_allow_html=True)
