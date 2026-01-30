@@ -4,15 +4,16 @@ import numpy as np
 import plotly.express as px
 
 # ==============================================================================
-# 版本：v3.14 (UI Enhancement)
+# 版本：v3.14 (UI Polish)
 # 日期：2026-01-29
-# 基底：v3.13
+# 基底：v3.14 (UI Fix)
 # 修改內容：
-# 1. 頁籤 (Tabs)：加大字體、加粗、自定義背景色與選中狀態顏色。
-# 2. 表格 (Tables)：透過 CSS 注入，嘗試將表格標題改為黑色、增加黑色邊框。
+# 1. 主標題移除版本號。
+# 2. 新增頁尾 (Footer) 顯示版本號於右下角。
 # ==============================================================================
 
 # === APP 設定 ===
+# 瀏覽器分頁標題保留版本號方便辨識，主畫面標題則移除
 st.set_page_config(page_title="5G RRU Thermal Calculator v3.14", layout="wide")
 
 # ==================================================
@@ -44,14 +45,53 @@ if not check_password():
 # 👇 主程式開始
 # ==================================================
 
-st.title("📡 5G RRU 體積估算引擎 v3.14")
+# [修改 1] 移除標題中的 v3.14
+st.title("📡 5G RRU 體積估算引擎")
 
 # --------------------------------------------------
-# [CSS] 樣式設定 (本次修改重點)
+# [CSS] 樣式設定
 # --------------------------------------------------
 st.markdown("""
 <style>
-    /* KPI 卡片 */
+    /* 1. 全域字體調整 */
+    html, body, [class*="css"] {
+        font-family: "Microsoft JhengHei", sans-serif;
+    }
+
+    /* 2. 頁籤 (Tabs) 優化 - 高對比 */
+    button[data-baseweb="tab"] {
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        background-color: #E0E0E0 !important;
+        color: #333333 !important;
+        border: 1px solid #999 !important;
+        border-radius: 5px 5px 0 0 !important;
+        margin-right: 4px !important;
+        padding: 10px 20px !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #4DA6FF !important;
+        color: black !important;
+        border: 2px solid black !important;
+        border-bottom: none !important;
+    }
+
+    /* 3. 表格 (Dataframe/Editor) 樣式覆蓋 */
+    [data-testid="stDataFrame"] thead tr th, 
+    [data-testid="stDataEditor"] thead tr th,
+    [data-testid="stDataFrame"] thead tr th div, 
+    [data-testid="stDataEditor"] thead tr th div {
+        color: black !important;
+        font-weight: 900 !important;
+        font-size: 16px !important;
+    }
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+        border: 2px solid black !important;
+        padding: 5px !important;
+        border-radius: 5px !important;
+    }
+
+    /* 4. KPI 卡片樣式 */
     .kpi-card {
         background-color: #ffffff;
         border-radius: 10px;
@@ -60,90 +100,18 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         border-left: 5px solid #333;
         text-align: center;
+        border: 1px solid #ddd;
     }
     .kpi-title { color: #666; font-size: 0.9rem; font-weight: 500; margin-bottom: 5px; }
     .kpi-value { color: #333; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; }
     .kpi-desc { color: #888; font-size: 0.8rem; }
 
-    /* =========================================
-       UI 優化需求 1: 頁籤 (Tabs) 樣式
-       ========================================= */
-    /* 調整頁籤按鈕的字體與背景 */
-    button[data-baseweb="tab"] {
-        font-size: 18px !important;     /* 字體加大 */
-        font-weight: bold !important;   /* 字體加粗 */
-        background-color: #f0f2f6;      /* 未選中時的底色 (淺灰) */
-        color: #555 !important;         /* 未選中時的文字顏色 */
-        border: 1px solid #ddd !important;
-        border-radius: 5px 5px 0 0 !important;
-        margin-right: 2px !important;
-    }
-
-    /* 調整「選中狀態」的頁籤 */
-    button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #ADD8E6 !important; /* 選中時的底色 (淺藍) */
-        color: black !important;              /* 選中時文字全黑 */
-        border-bottom: 2px solid #000 !important;
-    }
-
-    /* =========================================
-       UI 優化需求 2 & 3: 表格邊框與標題顏色
-       (Streamlit 表格渲染較複雜，以下 CSS 盡力覆蓋)
-       ========================================= */
-    
-    /* 強制表頭 (Header) 文字為黑色 */
-    th {
-        color: black !important;
-        font-weight: 900 !important; /* 加粗 */
-        font-size: 1rem !important;
-        background-color: #e0e0e0 !important; /* 增加表頭背景色區隔 */
-        border: 1px solid black !important;   /* 表頭邊框 */
-        text-align: center !important;
-    }
-
-    /* 強制表格內容 (Cell) 邊框 */
-    td {
-        border: 1px solid black !important; /* 嘗試強制黑框 */
-        color: black !important;            /* 內容文字黑色 */
-    }
-
-    /* 針對 Streamlit 新版 Dataframe 的容器邊框 */
-    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-        border: 2px solid black !important;
-    }
-
-    /* Scale Bar 樣式 (保留原設定) */
-    .legend-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-top: 40px; 
-        font-family: sans-serif;
-        font-size: 0.85rem;
-    }
-    .legend-title {
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: #555;
-    }
-    .legend-body {
-        display: flex;
-        align-items: stretch;
-        height: 200px; 
-    }
-    .gradient-bar {
-        width: 15px;
-        background: linear-gradient(to top, #d73027, #fee08b, #1a9850); 
-        border-radius: 3px;
-        margin-right: 8px;
-        border: 1px solid #ddd;
-    }
-    .legend-labels {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        color: #666;
-    }
+    /* Scale Bar 樣式 */
+    .legend-container { display: flex; flex-direction: column; align-items: center; margin-top: 40px; font-size: 0.85rem; }
+    .legend-title { font-weight: bold; margin-bottom: 5px; color: black; }
+    .legend-body { display: flex; align-items: stretch; height: 200px; }
+    .gradient-bar { width: 15px; background: linear-gradient(to top, #d73027, #fee08b, #1a9850); border-radius: 3px; margin-right: 8px; border: 1px solid black; }
+    .legend-labels { display: flex; flex-direction: column; justify-content: space-between; color: black; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -230,13 +198,7 @@ with tab_input:
         column_config={
             "Component": st.column_config.TextColumn(label="元件名稱", help="元件型號或代號 (如 PA, FPGA)", width="medium"),
             "Qty": st.column_config.NumberColumn(label="數量", help="該元件的使用數量", min_value=0, step=1, width="small"),
-            "Power(W)": st.column_config.NumberColumn(
-                label="單顆功耗 (W)", 
-                help="單一顆元件的發熱瓦數 (TDP)", 
-                format="%.2f", 
-                min_value=0.0,
-                step=0.1
-            ),
+            "Power(W)": st.column_config.NumberColumn(label="單顆功耗 (W)", help="單一顆元件的發熱瓦數 (TDP)", format="%.2f", min_value=0.0, step=0.1),
             "Height(mm)": st.column_config.NumberColumn(label="元件高度 (mm)", help="元件距離 PCB 底部的垂直高度。高度越高，局部環溫 (Local Amb) 越高。", format="%.1f"),
             "Pad_L": st.column_config.NumberColumn(label="Pad 長 (mm)", help="元件底部散熱焊盤 (Thermal Pad) 的長度"),
             "Pad_W": st.column_config.NumberColumn(label="Pad 寬 (mm)", help="元件底部散熱焊盤 (Thermal Pad) 的寬度"),
@@ -323,10 +285,10 @@ if Total_Power > 0 and Min_dT_Allowed > 0:
 else:
     R_sa = 0; Area_req = 0; Fin_Height = 0; RRU_Height = 0; Volume_L = 0
 
-# --- Tab 2: 詳細數據 (更新用語：裕度) ---
+# --- Tab 2: 詳細數據 (表二) ---
 with tab_data:
     st.subheader("🔢 詳細計算數據 (唯讀)")
-    st.caption("💡 **提示：Allowed_dT 欄位使用熱力圖顯示（紅=裕度不足/危險，綠=裕度充足/安全）。將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
+    st.caption("💡 **提示：Allowed_dT 欄位使用熱力圖顯示（紅=裕度不足/危險，綠=裕度充足/安全）。**")
     
     if not final_df.empty:
         min_val = final_df['Allowed_dT'].min()
@@ -343,7 +305,10 @@ with tab_data:
                 "Base_L": "{:.1f}", "Base_W": "{:.1f}", "Loc_Amb": "{:.1f}",
                 "R_int": "{:.5f}", "R_TIM": "{:.5f}", "Drop": "{:.1f}",
                 "Allowed_dT": "{:.2f}", "Total_W": "{:.1f}"
-            }).set_properties(**{'text-align': 'center'})
+            }).set_properties(**{
+                'text-align': 'center',
+                'color': 'black' 
+            })
 
             st.dataframe(
                 styled_df, 
@@ -438,3 +403,11 @@ with tab_viz:
         <h1 style="color: #00b894; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{round(Volume_L, 2)} L</h1>
     </div>
     """, unsafe_allow_html=True)
+
+# [修改 2] 頁面最下方新增版本號資訊 (靠右下角, 灰色小字)
+st.markdown("---")
+st.markdown("""
+<div style='text-align: right; color: #888888; font-size: 12px; margin-top: 20px; margin-bottom: 20px;'>
+    軟體版本: v3.14
+</div>
+""", unsafe_allow_html=True)
