@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # [新增] 用於製作複製按鈕元件
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -6,12 +7,13 @@ import plotly.graph_objects as go
 import time
 
 # ==============================================================================
-# 版本：v3.33 (Chinese Prompt & Copy Feature)
+# 版本：v3.34 (Smart Copy Button)
 # 日期：2026-02-01
 # 功能總結：
-# 1. Tab 4 AI 流程優化：
-#    - 提示詞模板更新為使用者指定的中文版本，並整合動態尺寸參數。
-#    - 移除下載按鈕，改用 st.code 區塊實現「一鍵複製」功能。
+# 1. Tab 4 AI 提示詞優化：
+#    - 更新為使用者指定的中文描述，並融合動態計算參數 (尺寸/鰭片數)。
+#    - 移除原本佔版面的 st.code 區塊。
+#    - 新增 JavaScript 複製按鈕，直接位於編輯框下方，點擊即可複製。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -610,9 +612,9 @@ with tab_3d:
     # 步驟 2 (Prompt 生成)
     st.markdown("#### Step 3. 複製提示詞 (Prompt)")
     
-    # 自動生成 Prompt (Chinese)
+    # 自動生成 Prompt (Chinese) - [修正] 使用者指定內容 + 動態參數
     prompt_template = f"""
-5G RRU 無線射頻單元的工業設計渲染圖。請基於第一張參考圖的幾何結構生成照片級真實影像。
+5G RRU 無線射頻單元的工業設計渲染圖。請基於此參考圖生成照片級真實影像。
 **結構參數：** 整體尺寸約 {L_hsk:.0f}x{W_hsk:.0f}x{RRU_Height:.0f}mm，包含 {num_fins_int} 片垂直散熱鰭片。
 **材質：** 壓鑄鋁散熱鰭片（銀色霧面質感），底部為和散熱鰭片同色的粉體塗裝電子艙。
 **細節：** 邊緣銳利，具有真實金屬紋理與倒角。底部 I/O 圖片可參考第二張樣式。
@@ -620,17 +622,77 @@ with tab_3d:
 **視角：** 等角視圖，純白背景，8k 高解析度。
     """.strip()
 
-    # [修正] 改為 text_area 讓使用者編輯
+    # [修正] text_area 讓使用者編輯
     user_prompt = st.text_area(
-        label="您可以在此直接修改提示詞 (編輯後下方區塊會同步更新)：",
+        label="您可以在此直接修改提示詞 (編輯後請點擊下方按鈕複製)：",
         value=prompt_template,
         height=250,
         help="此欄位已預填入當前模型的尺寸參數，您可以自由修改材質或風格描述。"
     )
     
-    # [修正] 改為顯示 st.code 以供複製
-    st.markdown("👇 **點擊下方代碼區塊右上角的複製按鈕 (Copy to clipboard) 即可：**")
-    st.code(user_prompt, language="text")
+    # [新增] 透過 iframe 嵌入 JavaScript 複製按鈕
+    # 注意：在 text_area 中若有反引號(`) 需要跳脫，以免 JS 報錯
+    safe_prompt = user_prompt.replace('`', '\`')
+    
+    components.html(
+        f"""
+        <script>
+        function copyToClipboard() {{
+            const text = `{safe_prompt}`;
+            // 嘗試使用 navigator.clipboard (現代瀏覽器)
+            if (navigator.clipboard && window.isSecureContext) {{
+                navigator.clipboard.writeText(text).then(function() {{
+                    document.getElementById('status').innerHTML = "✅ 已複製！";
+                    setTimeout(() => {{ document.getElementById('status').innerHTML = ""; }}, 2000);
+                }}, function(err) {{
+                    fallbackCopy(text);
+                }});
+            }} else {{
+                fallbackCopy(text);
+            }}
+        }}
+        
+        function fallbackCopy(text) {{
+            // 備用方案：建立隱藏 textarea
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {{
+                document.execCommand('copy');
+                document.getElementById('status').innerHTML = "✅ 已複製！";
+            }} catch (err) {{
+                document.getElementById('status').innerHTML = "❌ 複製失敗";
+            }}
+            document.body.removeChild(textArea);
+            setTimeout(() => {{ document.getElementById('status').innerHTML = ""; }}, 2000);
+        }}
+        </script>
+        
+        <div style="display: flex; align-items: center; font-family: 'Microsoft JhengHei', sans-serif;">
+            <button onclick="copyToClipboard()" style="
+                background-color: #ffffff;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 14px;
+                cursor: pointer;
+                color: #31333F;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                transition: all 0.2s;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            " onmouseover="this.style.borderColor='#ff4b4b'; this.style.color='#ff4b4b'" onmouseout="this.style.borderColor='#d1d5db'; this.style.color='#31333F'">
+                📋 複製提示詞 (Copy Prompt)
+            </button>
+            <span id="status" style="margin-left: 10px; color: #00b894; font-size: 14px; font-weight: bold;"></span>
+        </div>
+        """,
+        height=50
+    )
 
     # 步驟 3 (Gemini 操作)
     st.markdown("#### Step 4. 執行 AI 生成")
@@ -646,6 +708,6 @@ with tab_3d:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.33 Chinese Prompt & Copy | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.34 Smart Copy Button | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
