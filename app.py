@@ -5,11 +5,11 @@ import plotly.express as px
 import time
 
 # ==============================================================================
-# 版本：v3.15 (UI Revamp)
+# 版本：v3.15 (UI Revamp - Fixed)
 # 日期：2026-02-01
 # 說明：
-# 1. 核心計算邏輯與 v3.14 完全一致 (由 apply_excel_formulas 控制)
-# 2. 僅針對 UI/UX 進行視覺化增強 (CSS 注入、動畫效果、圖表配色)
+# 1. 核心計算邏輯與 v3.14 完全一致
+# 2. UI 優化：Tab 1 & Tab 2 已依照使用者需求復原文字說明與功能元件
 # ==============================================================================
 
 # === APP 設定 (增加頁面圖示) ===
@@ -158,6 +158,13 @@ st.markdown("""
     .result-box:hover {
         transform: scale(1.02);
     }
+    
+    /* 7. Scale Bar CSS (恢復舊版功能) */
+    .legend-container { display: flex; flex-direction: column; align-items: center; margin-top: 40px; font-size: 0.85rem; }
+    .legend-title { font-weight: bold; margin-bottom: 5px; color: black; }
+    .legend-body { display: flex; align-items: stretch; height: 200px; }
+    .gradient-bar { width: 15px; background: linear-gradient(to top, #d73027, #fee08b, #1a9850); border-radius: 3px; margin-right: 8px; border: 1px solid #ccc; }
+    .legend-labels { display: flex; flex-direction: column; justify-content: space-between; color: black; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -217,13 +224,12 @@ Top, Btm, Left, Right = 11, 13, 11, 11
 # ==================================================
 # 3. 分頁與邏輯
 # ==================================================
-# 增加 icon 讓 Tab 更活潑
 tab_input, tab_data, tab_viz = st.tabs(["📝 元件清單", "🔢 詳細數據", "📊 視覺化報告"])
 
 # --- Tab 1: 輸入介面 ---
 with tab_input:
-    st.subheader("🔥 元件熱源清單")
-    # [修正] 恢復原本的詳細操作提示
+    st.subheader("🔥 元件熱源清單設定")
+    # [已修正] 恢復原本的詳細操作提示
     st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
 
     # 這裡的 Data 完全不動
@@ -242,7 +248,7 @@ with tab_input:
     }
     df_input = pd.DataFrame(input_data)
 
-    # [修正] 恢復原本詳細的欄位設定 (包含 help 說明與完整 label)
+    # [已修正] 恢復原本詳細的欄位設定
     edited_df = st.data_editor(
         df_input,
         column_config={
@@ -250,10 +256,8 @@ with tab_input:
             "Qty": st.column_config.NumberColumn(label="數量", help="該元件的使用數量", min_value=0, step=1, width="small"),
             "Power(W)": st.column_config.NumberColumn(label="單顆功耗 (W)", help="單一顆元件的發熱瓦數 (TDP)", format="%.2f", min_value=0.0, step=0.1),
             "Height(mm)": st.column_config.NumberColumn(label="元件高度 (mm)", help="元件距離 PCB 底部的垂直高度。高度越高，局部環溫 (Local Amb) 越高。", format="%.1f"),
-            # 名詞修正：E-pad
             "Pad_L": st.column_config.NumberColumn(label="Pad 長 (mm)", help="元件底部散熱焊盤 (E-pad) 的長度"),
             "Pad_W": st.column_config.NumberColumn(label="Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度"),
-            
             "Thick(mm)": st.column_config.NumberColumn(label="基板厚度 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
             "Board_Type": st.column_config.SelectboxColumn(label="基板導通", help="PCB 垂直導熱方式", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
             "TIM_Type": st.column_config.SelectboxColumn(label="介面材料", help="接觸介質類型", options=["Solder", "Grease", "Pad", "Putty", "None"], width="medium"),
@@ -265,7 +269,7 @@ with tab_input:
         key="editor"
     )
 
-# --- 後台運算 (保持原汁原味，不更動) ---
+# --- 後台運算 ---
 tim_props = {
     "Solder": {"k": K_Solder, "t": t_Solder},
     "Grease": {"k": K_Grease, "t": t_Grease},
@@ -340,23 +344,67 @@ else:
 
 # --- Tab 2: 詳細數據 (表二) ---
 with tab_data:
-    st.subheader("🔢 運算矩陣")
+    # [修正] 標題還原
+    st.subheader("🔢 詳細計算數據 (唯讀)")
+    # [修正] 恢復提示
+    st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
     
     if not final_df.empty:
-        # 使用 Streamlit 內建的 metric color 邏輯增強視覺
-        styled_df = final_df.style.background_gradient(
-            subset=['Allowed_dT'], 
-            cmap='RdYlGn'
-        ).format({
-            "Base_L": "{:.1f}", "Base_W": "{:.1f}", "Loc_Amb": "{:.1f}",
-            "R_int": "{:.4f}", "R_TIM": "{:.4f}", "Drop": "{:.1f}",
-            "Allowed_dT": "{:.2f}", "Total_W": "{:.1f}"
-        })
+        # 計算 Gradient Bar 數值
+        min_val = final_df['Allowed_dT'].min()
+        max_val = final_df['Allowed_dT'].max()
+        mid_val = (min_val + max_val) / 2
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        # [修正] 恢復左右佈局 (Scale Bar)
+        col_table, col_legend = st.columns([0.9, 0.1])
         
-        # 色條說明 (優化版)
-        st.caption("🟢 **綠色**：散熱裕度充足 (Safe) | 🔴 **紅色**：散熱瓶頸 (Risk)")
+        with col_table:
+            # 使用 Streamlit 內建的 metric color 邏輯增強視覺
+            styled_df = final_df.style.background_gradient(
+                subset=['Allowed_dT'], 
+                cmap='RdYlGn'
+            ).format({
+                "Base_L": "{:.1f}", "Base_W": "{:.1f}", "Loc_Amb": "{:.1f}",
+                "R_int": "{:.4f}", "R_TIM": "{:.4f}", "Drop": "{:.1f}",
+                "Allowed_dT": "{:.2f}", "Total_W": "{:.1f}"
+            })
+            
+            # [修正] 格式化設定 (確保整數顯示小數點)
+            st.dataframe(
+                styled_df, 
+                column_config={
+                    "Base_L": st.column_config.NumberColumn(format="%.1f"),
+                    "Base_W": st.column_config.NumberColumn(format="%.1f"),
+                    "Loc_Amb": st.column_config.NumberColumn(format="%.1f"),
+                    "Drop": st.column_config.NumberColumn(format="%.1f"),
+                    "Total_W": st.column_config.NumberColumn(format="%.1f")
+                },
+                use_container_width=True, 
+                hide_index=True
+            )
+        
+        with col_legend:
+            # [修正] 恢復右側漸層條 HTML
+            st.markdown(f"""
+            <div class="legend-container">
+                <div class="legend-title">允許溫升<br>(°C)</div>
+                <div class="legend-body">
+                    <div class="gradient-bar"></div>
+                    <div class="legend-labels">
+                        <span>{max_val:.0f}</span>
+                        <span>{mid_val:.0f}</span>
+                        <span>{min_val:.0f}</span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # [修正] 恢復底部名詞解釋
+        st.info("""
+        ℹ️ **名詞解釋 - 允許溫升 (Allowed dT)** 此數值代表 **「散熱器可用的溫升裕度」** (Limit - Local Ambient - Drop)。
+        * 🟩 **綠色 (數值高)**：代表散熱裕度充足，該元件不易過熱。
+        * 🟥 **紅色 (數值低)**：代表散熱裕度極低，該元件是系統的熱瓶頸。
+        """)
 
 # --- Tab 3: 視覺化報告 ---
 with tab_viz:
