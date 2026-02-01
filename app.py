@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go  # [新增] 用於繪製 3D 圖形
 import time
 
 # ==============================================================================
-# 版本：v3.24 (Margins Renamed)
+# 版本：v3.26 (3D View Added)
 # 日期：2026-02-01
-# 修正重點：
-# 1. 側邊欄「2. PCB 與 機構尺寸」：移除分隔線。
-# 2. 側邊欄標題修改：將 "機構預留邊距 (Margins)" 改為 "PCB板離外殼邊距(防水)"。
+# 功能總結：
+# 1. 保留 v3.25 所有功能 (核心邏輯、UI 風格、圓餅圖優化、邊距設定)。
+# 2. 新增 Tab 4「3D 模擬視圖」：根據計算出的 L/W/H 繪製互動式 3D 立方體，供業務展示使用。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -135,7 +136,6 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
     H_shield = st.number_input("HSK內腔深度 (mm)", value=20)
     H_filter = st.number_input("Cavity Filter 厚度 (mm)", value=42)
     
-    # [修正] 移除分隔線，並修改標題文字
     st.caption("📏 PCB板離外殼邊距(防水)")
     
     m1, m2 = st.columns(2)
@@ -180,7 +180,8 @@ with st.sidebar.expander("4. 鰭片幾何", expanded=False):
 # ==================================================
 # 3. 分頁與邏輯
 # ==================================================
-tab_input, tab_data, tab_viz = st.tabs(["📝 元件清單", "🔢 詳細數據", "📊 視覺化報告"])
+# [修正] 新增 "🧊 3D 模擬視圖" 頁籤
+tab_input, tab_data, tab_viz, tab_3d = st.tabs(["📝 元件清單", "🔢 詳細數據", "📊 視覺化報告", "🧊 3D 模擬視圖"])
 
 # --- Tab 1: 輸入介面 ---
 with tab_input:
@@ -441,9 +442,72 @@ with tab_viz:
     </div>
     """, unsafe_allow_html=True)
 
+# --- Tab 4: 3D 模擬視圖 (新增) ---
+with tab_3d:
+    st.subheader("🧊 RRU 3D 產品模擬圖")
+    st.caption("此視圖根據計算出的長寬高 (L x W x H) 繪製，可供業務展示或與客戶確認機構尺寸。")
+    
+    if L_hsk > 0 and W_hsk > 0 and RRU_Height > 0:
+        # 定義 3D 盒子的頂點 (Vertices) - 8 個點
+        x_vals = [0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0]
+        y_vals = [0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk]
+        z_vals = [0, 0, 0, 0, RRU_Height, RRU_Height, RRU_Height, RRU_Height]
+        
+        # 定義 3D 盒子的面 (Faces) - 每個面由 2 個三角形組成
+        # 使用 Mesh3d 的 i, j, k 索引來定義三角形
+        i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
+        j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
+        k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
+        
+        # 繪製半透明的藍色盒子
+        fig_3d = go.Figure(data=[
+            go.Mesh3d(
+                x=x_vals, y=y_vals, z=z_vals,
+                i=i, j=j, k=k,
+                opacity=0.3, # 半透明
+                color='#00b894', # 使用 App 的主題綠色
+                flatshading=True,
+                name='RRU Body'
+            )
+        ])
+        
+        # 繪製邊框線條 (Wireframe) - 讓形狀更立體清楚
+        # 依序連線：底面 -> 頂面 -> 垂直稜線
+        x_lines = [0, L_hsk, L_hsk, 0, 0, None, 0, L_hsk, L_hsk, 0, 0, None, 0, 0, None, L_hsk, L_hsk, None, L_hsk, L_hsk, None, 0, 0]
+        y_lines = [0, 0, W_hsk, W_hsk, 0, None, 0, 0, W_hsk, W_hsk, 0, None, 0, 0, None, 0, 0, None, W_hsk, W_hsk, None, W_hsk, W_hsk]
+        z_lines = [0, 0, 0, 0, 0, None, RRU_Height, RRU_Height, RRU_Height, RRU_Height, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height]
+        
+        fig_3d.add_trace(go.Scatter3d(
+            x=x_lines, y=y_lines, z=z_lines,
+            mode='lines',
+            line=dict(color='black', width=3),
+            name='Wireframe'
+        ))
+        
+        # 更新 Layout 設定
+        fig_3d.update_layout(
+            scene=dict(
+                xaxis=dict(title='Length (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
+                yaxis=dict(title='Width (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
+                zaxis=dict(title='Height (mm)', range=[0, max(L_hsk, W_hsk)*0.8]), # 讓 Z 軸比例合理
+                aspectmode='data' # 保持真實比例
+            ),
+            margin=dict(l=0, r=0, b=0, t=0),
+            showlegend=False
+        )
+        
+        # 顯示 3D 圖表
+        st.plotly_chart(fig_3d, use_container_width=True)
+        
+        # 顯示尺寸文字
+        st.info(f"📐 **目前模型尺寸：** 長 {L_hsk:.1f} mm x 寬 {W_hsk:.1f} mm x 高 {RRU_Height:.1f} mm")
+        
+    else:
+        st.warning("⚠️ 無法繪製 3D 圖形，因為計算出的尺寸無效 (為 0)。請檢查元件清單與參數設定。")
+
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.24 Margins Renamed | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.26 3D View Added | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
