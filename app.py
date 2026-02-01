@@ -6,12 +6,12 @@ import plotly.graph_objects as go
 import time
 
 # ==============================================================================
-# 版本：v3.30 (Unified Color Scheme)
+# 版本：v3.32 (Editable Prompt)
 # 日期：2026-02-01
 # 功能總結：
-# 1. Tab 4 3D 視圖配色調整：
-#    - 將底部電子艙 (Electronics Body) 顏色改為與散熱鰭片 (Fins) 相同的鋁原色。
-#    - 創造一體成形的金屬質感視覺效果。
+# 1. Tab 4 AI 流程優化：
+#    - 將 Prompt 顯示區塊由唯讀代碼改為可編輯的文本框 (st.text_area)。
+#    - 新增「儲存提示詞」按鈕，可將編輯後的 Prompt 下載為 .txt 檔。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -611,7 +611,7 @@ with tab_3d:
     st.markdown("#### Step 3. 複製提示詞 (Prompt)")
     
     # 自動生成 Prompt
-    prompt_text = f"""
+    prompt_template = f"""
 Industrial design rendering of a 5G Radio Remote Unit (RRU).
 **Input Image 1 (Structure):** Please strictly follow the blockout geometry in the first image. The object has dimensions approx {L_hsk:.0f}x{W_hsk:.0f}x{RRU_Height:.0f}mm. Note the vertical heatsink fins (count: {num_fins_int}).
 **Input Image 2 (Style):** Use the second image as a reference for realistic materials, I/O connectors, and surface finish.
@@ -619,8 +619,25 @@ Industrial design rendering of a 5G Radio Remote Unit (RRU).
 **View:** Isometric view, studio lighting, photorealistic 8k.
     """.strip()
     
-    st.code(prompt_text, language="text")
-    st.caption("👆 點擊右上角按鈕即可複製。此 Prompt 已包含當前模型的尺寸與鰭片參數。")
+    # [修正] 改為 text_area 讓使用者編輯
+    user_prompt = st.text_area(
+        label="您可以在此直接修改提示詞：",
+        value=prompt_template,
+        height=250,
+        help="此欄位已預填入當前模型的尺寸參數，您可以自由修改材質或風格描述。"
+    )
+    
+    # [新增] 儲存按鈕
+    c_copy, c_save = st.columns([1, 1])
+    with c_save:
+        st.download_button(
+            label="💾 儲存提示詞 (.txt)",
+            data=user_prompt,
+            file_name="prompt.txt",
+            mime="text/plain"
+        )
+    with c_copy:
+        st.info("👆 編輯完成後，可直接全選複製 (Ctrl+A, Ctrl+C) 或點擊右側按鈕下載存檔。")
 
     # 步驟 3 (Gemini 操作)
     st.markdown("#### Step 4. 執行 AI 生成")
@@ -636,6 +653,6 @@ Industrial design rendering of a 5G Radio Remote Unit (RRU).
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.31 AI Workflow Integration | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.32 Editable Prompt | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
