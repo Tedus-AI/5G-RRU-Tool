@@ -223,7 +223,8 @@ tab_input, tab_data, tab_viz = st.tabs(["📝 元件清單", "🔢 詳細數據"
 # --- Tab 1: 輸入介面 ---
 with tab_input:
     st.subheader("🔥 元件熱源清單")
-    st.caption("請在下方表格直接編輯各元件參數，系統將即時運算。")
+    # [修正] 恢復原本的詳細操作提示
+    st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
 
     # 這裡的 Data 完全不動
     input_data = {
@@ -241,20 +242,23 @@ with tab_input:
     }
     df_input = pd.DataFrame(input_data)
 
+    # [修正] 恢復原本詳細的欄位設定 (包含 help 說明與完整 label)
     edited_df = st.data_editor(
         df_input,
         column_config={
-            "Component": st.column_config.TextColumn(label="元件名稱", width="medium"),
-            "Qty": st.column_config.NumberColumn(label="數量", min_value=0, step=1, width="small"),
-            "Power(W)": st.column_config.NumberColumn(label="功耗 (W)", format="%.2f", min_value=0.0),
-            "Height(mm)": st.column_config.NumberColumn(label="高度 (mm)", format="%.1f"),
-            "Pad_L": st.column_config.NumberColumn(label="Pad 長"),
-            "Pad_W": st.column_config.NumberColumn(label="Pad 寬"),
-            "Thick(mm)": st.column_config.NumberColumn(label="板厚", format="%.1f"),
-            "Board_Type": st.column_config.SelectboxColumn(label="導通方式", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
-            "TIM_Type": st.column_config.SelectboxColumn(label="TIM 類型", options=["Solder", "Grease", "Pad", "Putty", "None"], width="medium"),
-            "R_jc": st.column_config.NumberColumn(label="Rjc", format="%.2f"),
-            "Limit(C)": st.column_config.NumberColumn(label="限溫 (°C)", format="%.1f")
+            "Component": st.column_config.TextColumn(label="元件名稱", help="元件型號或代號 (如 PA, FPGA)", width="medium"),
+            "Qty": st.column_config.NumberColumn(label="數量", help="該元件的使用數量", min_value=0, step=1, width="small"),
+            "Power(W)": st.column_config.NumberColumn(label="單顆功耗 (W)", help="單一顆元件的發熱瓦數 (TDP)", format="%.2f", min_value=0.0, step=0.1),
+            "Height(mm)": st.column_config.NumberColumn(label="元件高度 (mm)", help="元件距離 PCB 底部的垂直高度。高度越高，局部環溫 (Local Amb) 越高。", format="%.1f"),
+            # 名詞修正：E-pad
+            "Pad_L": st.column_config.NumberColumn(label="Pad 長 (mm)", help="元件底部散熱焊盤 (E-pad) 的長度"),
+            "Pad_W": st.column_config.NumberColumn(label="Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度"),
+            
+            "Thick(mm)": st.column_config.NumberColumn(label="基板厚度 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
+            "Board_Type": st.column_config.SelectboxColumn(label="基板導通", help="PCB 垂直導熱方式", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
+            "TIM_Type": st.column_config.SelectboxColumn(label="介面材料", help="接觸介質類型", options=["Solder", "Grease", "Pad", "Putty", "None"], width="medium"),
+            "R_jc": st.column_config.NumberColumn(label="熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
+            "Limit(C)": st.column_config.NumberColumn(label="限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
         },
         num_rows="dynamic",
         use_container_width=True,
