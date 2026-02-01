@@ -2,15 +2,17 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go  # [新增] 用於繪製 3D 圖形
+import plotly.graph_objects as go
 import time
 
 # ==============================================================================
-# 版本：v3.26 (3D View Added)
+# 版本：v3.27 (Detailed Fin Structure)
 # 日期：2026-02-01
 # 功能總結：
-# 1. 保留 v3.25 所有功能 (核心邏輯、UI 風格、圓餅圖優化、邊距設定)。
-# 2. 新增 Tab 4「3D 模擬視圖」：根據計算出的 L/W/H 繪製互動式 3D 立方體，供業務展示使用。
+# 1. Tab 4 3D 視圖大升級：
+#    - 不再只是畫一個方塊，而是真實堆疊出 [電子艙] + [散熱底板] + [所有鰭片]。
+#    - 鰭片數量、高度、厚度、間距完全依照計算結果繪製 (True to Scale)。
+#    - 增加線框 (Wireframe) 讓結構更清晰。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -180,7 +182,6 @@ with st.sidebar.expander("4. 鰭片幾何", expanded=False):
 # ==================================================
 # 3. 分頁與邏輯
 # ==================================================
-# [修正] 新增 "🧊 3D 模擬視圖" 頁籤
 tab_input, tab_data, tab_viz, tab_3d = st.tabs(["📝 元件清單", "🔢 詳細數據", "📊 視覺化報告", "🧊 3D 模擬視圖"])
 
 # --- Tab 1: 輸入介面 ---
@@ -442,37 +443,112 @@ with tab_viz:
     </div>
     """, unsafe_allow_html=True)
 
-# --- Tab 4: 3D 模擬視圖 (新增) ---
+# --- Tab 4: 3D 模擬視圖 (新增 + Fin Structure) ---
 with tab_3d:
-    st.subheader("🧊 RRU 3D 產品模擬圖")
-    st.caption("此視圖根據計算出的長寬高 (L x W x H) 繪製，可供業務展示或與客戶確認機構尺寸。")
+    st.subheader("🧊 RRU 3D 產品模擬圖 (詳細鰭片結構)")
+    st.caption("模型展示：底部電子艙 (深色) + 中間散熱底板 (銀色) + 頂部散熱鰭片 (銀色)。鰭片數量與間距為真實比例。")
     
-    if L_hsk > 0 and W_hsk > 0 and RRU_Height > 0:
-        # 定義 3D 盒子的頂點 (Vertices) - 8 個點
-        x_vals = [0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0]
-        y_vals = [0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk]
-        z_vals = [0, 0, 0, 0, RRU_Height, RRU_Height, RRU_Height, RRU_Height]
+    if L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
+        fig_3d = go.Figure()
         
-        # 定義 3D 盒子的面 (Faces) - 每個面由 2 個三角形組成
-        # 使用 Mesh3d 的 i, j, k 索引來定義三角形
-        i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
-        j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
-        k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
+        # --- 1. 繪製底部電子艙 (Body: Shield + Filter) ---
+        # Z 範圍: 0 ~ (H_shield + H_filter)
+        h_body = H_shield + H_filter
         
-        # 繪製半透明的藍色盒子
-        fig_3d = go.Figure(data=[
-            go.Mesh3d(
-                x=x_vals, y=y_vals, z=z_vals,
-                i=i, j=j, k=k,
-                opacity=0.3, # 半透明
-                color='#00b894', # 使用 App 的主題綠色
-                flatshading=True,
-                name='RRU Body'
-            )
-        ])
+        # Body Mesh
+        fig_3d.add_trace(go.Mesh3d(
+            # 8個頂點
+            x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0],
+            y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk],
+            z=[0, 0, 0, 0, h_body, h_body, h_body, h_body],
+            # 12個面 (i, j, k)
+            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+            j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+            k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+            color='#2d3436', # 深灰色
+            flatshading=True,
+            name='Electronics Body'
+        ))
         
-        # 繪製邊框線條 (Wireframe) - 讓形狀更立體清楚
-        # 依序連線：底面 -> 頂面 -> 垂直稜線
+        # --- 2. 繪製散熱底板 (Base Plate) ---
+        # Z 範圍: h_body ~ (h_body + t_base)
+        z_base_start = h_body
+        z_base_end = h_body + t_base
+        
+        fig_3d.add_trace(go.Mesh3d(
+            x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0],
+            y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk],
+            z=[z_base_start, z_base_start, z_base_start, z_base_start, z_base_end, z_base_end, z_base_end, z_base_end],
+            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+            j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+            k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+            color='#b2bec3', # 銀灰色
+            flatshading=True,
+            name='Heatsink Base'
+        ))
+        
+        # --- 3. 繪製鰭片 (Fins) ---
+        # 迴圈產生每一個鰭片的 Mesh 資料
+        # 為了效能，我們將所有鰭片的頂點合併成一個 Mesh3d 物件
+        
+        fin_x = []
+        fin_y = []
+        fin_z = []
+        fin_i = []
+        fin_j = []
+        fin_k = []
+        
+        # 鰭片參數
+        z_fin_start = z_base_end
+        z_fin_end = z_base_end + Fin_Height
+        num_fins_int = int(Fin_Count)
+        
+        # 每個鰭片有 8 個頂點，12 個面
+        # 定義單一盒子的面索引樣板
+        base_i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
+        base_j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
+        base_k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
+        
+        for idx in range(num_fins_int):
+            # 計算當前鰭片的 Y 起始位置
+            # 假設從 Y=0 開始排列
+            y_start = idx * (Fin_t + Gap)
+            y_end = y_start + Fin_t
+            
+            # 如果鰭片超出機構寬度，就不畫了
+            if y_end > W_hsk:
+                break
+                
+            # 當前鰭片的 8 個頂點 (偏移量)
+            # 頂點順序：底面4點(0-3), 頂面4點(4-7)
+            # 底面: (0, ys, zs), (L, ys, zs), (L, ye, zs), (0, ye, zs)
+            current_x = [0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0]
+            current_y = [y_start, y_start, y_end, y_end, y_start, y_start, y_end, y_end]
+            current_z = [z_fin_start, z_fin_start, z_fin_start, z_fin_start, z_fin_end, z_fin_end, z_fin_end, z_fin_end]
+            
+            # 偏移索引值 (因為所有頂點都在同一個 list 中)
+            offset = len(fin_x)
+            
+            # 加入資料
+            fin_x.extend(current_x)
+            fin_y.extend(current_y)
+            fin_z.extend(current_z)
+            
+            fin_i.extend([x + offset for x in base_i])
+            fin_j.extend([x + offset for x in base_j])
+            fin_k.extend([x + offset for x in base_k])
+
+        # 繪製所有鰭片
+        fig_3d.add_trace(go.Mesh3d(
+            x=fin_x, y=fin_y, z=fin_z,
+            i=fin_i, j=fin_j, k=fin_k,
+            color='#b2bec3', # 銀灰色 (同 Base)
+            flatshading=True,
+            name='Fins'
+        ))
+        
+        # --- 4. 繪製外框線 (Wireframe) ---
+        # 為了美觀，只畫最大外框 (Bounding Box)
         x_lines = [0, L_hsk, L_hsk, 0, 0, None, 0, L_hsk, L_hsk, 0, 0, None, 0, 0, None, L_hsk, L_hsk, None, L_hsk, L_hsk, None, 0, 0]
         y_lines = [0, 0, W_hsk, W_hsk, 0, None, 0, 0, W_hsk, W_hsk, 0, None, 0, 0, None, 0, 0, None, W_hsk, W_hsk, None, W_hsk, W_hsk]
         z_lines = [0, 0, 0, 0, 0, None, RRU_Height, RRU_Height, RRU_Height, RRU_Height, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height]
@@ -480,27 +556,30 @@ with tab_3d:
         fig_3d.add_trace(go.Scatter3d(
             x=x_lines, y=y_lines, z=z_lines,
             mode='lines',
-            line=dict(color='black', width=3),
-            name='Wireframe'
+            line=dict(color='black', width=2),
+            showlegend=False
         ))
-        
+
         # 更新 Layout 設定
         fig_3d.update_layout(
             scene=dict(
                 xaxis=dict(title='Length (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
                 yaxis=dict(title='Width (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
-                zaxis=dict(title='Height (mm)', range=[0, max(L_hsk, W_hsk)*0.8]), # 讓 Z 軸比例合理
-                aspectmode='data' # 保持真實比例
+                zaxis=dict(title='Height (mm)', range=[0, max(L_hsk, W_hsk)*0.8]), 
+                aspectmode='data', # 保持真實比例
+                camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)) # 設定預設視角
             ),
             margin=dict(l=0, r=0, b=0, t=0),
-            showlegend=False
+            height=600 # 加大畫布高度
         )
         
         # 顯示 3D 圖表
         st.plotly_chart(fig_3d, use_container_width=True)
         
         # 顯示尺寸文字
-        st.info(f"📐 **目前模型尺寸：** 長 {L_hsk:.1f} mm x 寬 {W_hsk:.1f} mm x 高 {RRU_Height:.1f} mm")
+        c1, c2 = st.columns(2)
+        c1.info(f"📐 **外觀尺寸：** 長 {L_hsk:.1f} x 寬 {W_hsk:.1f} x 高 {RRU_Height:.1f} mm")
+        c2.success(f"⚡ **鰭片規格：** 數量 {num_fins_int} pcs | 高度 {Fin_Height:.1f} mm | 厚度 {Fin_t} mm | 間距 {Gap} mm")
         
     else:
         st.warning("⚠️ 無法繪製 3D 圖形，因為計算出的尺寸無效 (為 0)。請檢查元件清單與參數設定。")
@@ -508,6 +587,6 @@ with tab_3d:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.26 3D View Added | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.27 Detailed Fin Structure | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
