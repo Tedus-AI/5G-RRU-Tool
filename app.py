@@ -5,10 +5,11 @@ import plotly.express as px
 import time
 
 # ==============================================================================
-# 版本：v3.19 (Pie Chart Update)
+# 版本：v3.20 (Leader Lines Update)
 # 日期：2026-02-01
 # 修正重點：
-# 1. Tab 3 圓餅圖：隱藏右側圖例，直接將「元件名稱+百分比」顯示於圓餅圖塊上 (textinfo='label+percent')
+# 1. Tab 3 圓餅圖：改用引導線 (Leader Lines) 將標籤拉出，解決小數值元件文字被遮蔽的問題。
+#    (設定 textposition='outside')
 # ==============================================================================
 
 # === APP 設定 ===
@@ -381,13 +382,15 @@ with tab_viz:
     if not valid_rows.empty:
         c1, c2 = st.columns(2)
         with c1:
-            # [修正] 圓餅圖：標籤與百分比直接顯示於圖上，隱藏圖例
+            # [修正] 圓餅圖：改為外部標籤 + 引導線 (Callout)，解決小數值看不見的問題
             fig_pie = px.pie(valid_rows, values='Total_W', names='Component', 
                              title='<b>各元件功耗佔比 (Power Breakdown)</b>', 
                              hole=0.4,
                              color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig_pie.update_traces(textinfo='label+percent', textposition='inside')
-            fig_pie.update_layout(showlegend=False, margin=dict(t=40, b=0, l=0, r=0))
+            # 使用 textposition='outside' 讓標籤顯示在圓餅外，Plotly 會自動繪製引導線
+            fig_pie.update_traces(textposition='outside', textinfo='label+percent')
+            # 隱藏圖例 (showlegend=False)，並增加 layout 邊距以容納外部標籤
+            fig_pie.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20))
             st.plotly_chart(fig_pie, use_container_width=True)
             
         with c2:
@@ -418,6 +421,6 @@ with tab_viz:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.19 Pie Chart Update | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.20 Leader Lines Update | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
