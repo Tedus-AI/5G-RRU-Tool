@@ -8,11 +8,13 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.40 (Title Update)
+# 版本：v3.42 (True Scale Fix)
 # 日期：2026-02-02
 # 修正重點：
-# 1. Tab 4 標題更新：
-#    - 將 "AI 寫實渲染生成流程" 修改為 "RRU寫實渲染生成流程(AI)"。
+# 1. Tab 4 3D 視圖比例修正：
+#    - 計算最大尺寸 (max_dim)。
+#    - 強制 X/Y/Z 三軸使用相同的 Range ([0, max_dim*1.2])。
+#    - 確保 3D 視圖呈現嚴格的 1:1:1 物理比例，避免視覺壓縮或拉伸。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -153,7 +155,6 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
     Coin_L_Setting = c1.number_input("銅塊長 (mm)", value=55.0, step=1.0)
     Coin_W_Setting = c2.number_input("銅塊寬 (mm)", value=35.0, step=1.0)
 
-    # [修正] 將原本在 Expander 4 的鰭片設定移到這裡
     st.markdown("---")
     st.caption("🌊 鰭片幾何")
     c_fin1, c_fin2 = st.columns(2)
@@ -181,8 +182,6 @@ with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     K_Solder = c9.number_input("K (錫片)", value=58.0)
     t_Solder = c10.number_input("t (錫片)", value=0.3)
     Voiding = st.number_input("錫片空洞率 (Voiding)", value=0.75)
-
-# [修正] 移除原本獨立的 Expander 4 (鰭片幾何已併入上方)
 
 # ==================================================
 # 3. 分頁與邏輯
@@ -570,14 +569,18 @@ with tab_3d:
             showlegend=False
         ))
 
+        # [修正] 計算最大尺寸，統一所有軸的 Range
+        max_dim = max(L_hsk, W_hsk, RRU_Height)
+
         fig_3d.update_layout(
             scene=dict(
-                xaxis=dict(title='Length (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
-                yaxis=dict(title='Width (mm)', range=[0, max(L_hsk, W_hsk)*1.2]),
-                zaxis=dict(title='Height (mm)', range=[0, max(L_hsk, W_hsk)*0.8]), 
+                # 強制三個軸使用相同的範圍，確保 1:1:1 比例
+                xaxis=dict(title='Length (mm)', range=[0, max_dim*1.2]),
+                yaxis=dict(title='Width (mm)', range=[0, max_dim*1.2]),
+                zaxis=dict(title='Height (mm)', range=[0, max_dim*1.2]), 
                 aspectmode='data', 
                 camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
-                bgcolor='white' # 背景改為純白，更像 CAD
+                bgcolor='white'
             ),
             margin=dict(l=0, r=0, b=0, t=0),
             height=600
@@ -608,73 +611,35 @@ with tab_3d:
         st.info("請將滑鼠移至上方 3D 圖表的右上角，點擊相機圖示 **(Download plot as a png)** 下載目前的模型底圖。")
     
     with col_step1_2:
-        st.markdown("#### Step 2. 上傳寫實參考圖 (含 I/O)")
+        st.markdown("#### Step 2. 下載寫實參考圖 (含 I/O)")
         
-        # 1. 嘗試自動載入 GitHub 上的預設圖片
+        # 自動載入預設圖片
         default_ref_bytes = None
         default_ref_name = None
         default_ref_type = None
         
-        # 預設檔名清單 (依優先順序)
         default_files = ['reference_style.png', 'reference_style.jpg', 'reference_style.jpeg']
         for filename in default_files:
             if os.path.exists(filename):
                 with open(filename, "rb") as f:
                     default_ref_bytes = f.read()
                     default_ref_name = filename
-                    # 簡易判斷 mime type
                     ext = filename.split('.')[-1].lower()
                     if ext == 'png': default_ref_type = 'image/png'
                     elif ext in ['jpg', 'jpeg']: default_ref_type = 'image/jpeg'
                 break
         
-        # 2. 處理使用者上傳 (優先權高於預設圖)
-        # key='ref_uploader' 以避免互動時重置
-        ref_file = st.file_uploader("從本機上傳您的參考圖片 (Reference Image) [若無上傳將使用系統預設圖]", type=['png', 'jpg', 'jpeg'], key='ref_uploader')
-        
-        # 3. 決定最終要顯示的圖片
-        final_img_bytes = None
-        final_img_name = None
-        final_img_type = None
-
-        # 如果使用者有上傳 -> 用使用者的
-        if ref_file is not None:
-            # 更新 Session State (Persistent Upload)
-            st.session_state['ref_img_bytes'] = ref_file.getvalue()
-            st.session_state['ref_img_name'] = ref_file.name
-            st.session_state['ref_img_type'] = ref_file.type
-            
-            final_img_bytes = st.session_state['ref_img_bytes']
-            final_img_name = st.session_state['ref_img_name']
-            final_img_type = st.session_state['ref_img_type']
-            
-        # 如果使用者沒上傳，但 Session State 裡有舊的 -> 用 Session State 的 (防止重整消失)
-        elif 'ref_img_bytes' in st.session_state:
-            final_img_bytes = st.session_state['ref_img_bytes']
-            final_img_name = st.session_state['ref_img_name']
-            final_img_type = st.session_state['ref_img_type']
-            
-        # 如果都沒有，但有預設圖 -> 用預設圖
-        elif default_ref_bytes is not None:
-            final_img_bytes = default_ref_bytes
-            final_img_name = default_ref_name
-            final_img_type = default_ref_type
-
-        # 4. 顯示與下載按鈕
-        if final_img_bytes is not None:
-            # 顯示預覽圖
-            st.image(final_img_bytes, caption=f"目前使用的參考圖: {final_img_name}", width=200)
-            
-            # 下載按鈕
+        if default_ref_bytes is not None:
+            st.image(default_ref_bytes, caption=f"系統預設參考圖: {default_ref_name}", width=200)
             st.download_button(
                 label="⬇️ 下載原始高解析度圖檔",
-                data=final_img_bytes,
-                file_name=final_img_name,
-                mime=final_img_type,
+                data=default_ref_bytes,
+                file_name=default_ref_name,
+                mime=default_ref_type,
                 key="download_ref_img"
             )
         else:
-            st.info("尚未上傳圖片，且系統中無預設參考圖 (reference_style.png)。")
+            st.warning("⚠️ 系統中找不到預設參考圖 (reference_style.png)。請確認檔案已上傳至 GitHub。")
 
     # 步驟 2 (Prompt 生成)
     st.markdown("#### Step 3. 複製提示詞 (Prompt)")
@@ -775,6 +740,6 @@ with tab_3d:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.40 Title Update | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.42 True Scale Fix | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
