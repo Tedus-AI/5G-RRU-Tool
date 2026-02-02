@@ -8,18 +8,17 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.50 (Restored Final)
+# 版本：v3.51 (Physics Guardrails)
 # 日期：2026-02-02
-# 狀態：正式發布版 (還原至 v3.50)
+# 狀態：正式發布版 (含自動 h 計算 + DRC 防呆機制)
 # 
-# 功能確認：
-# 1. [核心] 自動計算熱對流係數 h。
-#    - 對流 (h_conv): 6.4 * tanh(Gap / 7.0)。
-#    - 輻射 (h_rad): 視因子修正。
-#    - 無 DRC 阻擋 (Gap=1mm 仍可計算)。
-# 2. [UI] 側邊欄整合：鰭片幾何併入機構尺寸區塊，即時顯示計算出的 h 值。
-# 3. [3D] 產品模擬圖：正交投影 (Orthographic)、1:1:1 真實比例、鋁原色材質。
-# 4. [AI] 渲染工作流：下載結構圖/參考圖、複製連動提示詞。
+# 功能總結：
+# 1. [核心] 自動計算熱對流係數 h (C_decay=7.0)。
+# 2. [DRC] 新增設計規則檢查，防止不合理的幾何設計：
+#    - 檢查 1 (優先): 流阻比 (Aspect Ratio) > 15 -> 判定為氣塞 (Choked Flow)。
+#    - 檢查 2: 絕對間距 (Gap) < 4mm -> 判定為自然對流失效。
+#    - 失敗時，Tab 3 與 Tab 4 會顯示紅色警報並隱藏數值/圖形。
+# 3. [UI] 側邊欄整合、3D 正交視圖、AI 提示詞連動皆保留。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -313,7 +312,7 @@ Fin_Count = W_hsk / (Gap + Fin_t)
 Total_Power = Total_Watts_Sum * Margin
 if Total_Power > 0 and Min_dT_Allowed > 0:
     R_sa = Min_dT_Allowed / Total_Power
-    # [v3.50] 使用自動計算的 h_value
+    # [修正] 使用自動計算的 h_value
     Area_req = 1 / (h_value * R_sa * Eff)
     Base_Area_m2 = (L_hsk * W_hsk) / 1e6
     try: Fin_Height = ((Area_req - Base_Area_m2) * 1e6) / (2 * Fin_Count * L_hsk)
@@ -322,6 +321,28 @@ if Total_Power > 0 and Min_dT_Allowed > 0:
     Volume_L = (L_hsk * W_hsk * RRU_Height) / 1e6
 else:
     R_sa = 0; Area_req = 0; Fin_Height = 0; RRU_Height = 0; Volume_L = 0
+
+# ==================================================
+# [新增] 設計規則檢查 (DRC) - 防止不合理設計 (v3.51)
+# ==================================================
+# 計算流阻比 (Aspect Ratio)
+if Gap > 0:
+    aspect_ratio = Fin_Height / Gap
+else:
+    aspect_ratio = 999
+
+drc_failed = False
+drc_msg = ""
+
+# 檢查 1: 流阻比 (Aspect Ratio) - [優先檢查]
+if aspect_ratio > 15.0:
+    drc_failed = True
+    drc_msg = f"⛔ **設計無效 (Choked Flow)：** 流阻比 (高/寬) 達 {aspect_ratio:.1f} (上限 15)。\n鰭片太深且太密，空氣滯留無法流動，請降低高度或增大間距。"
+        
+# 檢查 2: 絕對間距 (Gap)
+elif Gap < 4.0:
+    drc_failed = True
+    drc_msg = f"⛔ **設計無效 (Gap Too Small)：** 鰭片間距 {Gap}mm 小於物理極限 (4mm)。\n邊界層完全重疊，自然對流失效。"
 
 # --- Tab 2: 詳細數據 (表二) ---
 with tab_data:
@@ -460,46 +481,64 @@ with tab_viz:
     st.markdown("---")
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
-    card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
-    card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
+    
+    # [修正] 根據 DRC 結果決定顯示內容
+    if drc_failed:
+        # 如果 DRC 失敗，顯示紅色錯誤方塊
+        st.error(drc_msg)
+        
+        # 顯示灰色無效卡片
+        st.markdown(f"""
+        <div style="display:flex; gap:20px;">
+            <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
+                建議鰭片高度<br>N/A
+            </div>
+            <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
+                RRU 整機尺寸<br>Calculation Failed
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    else:
+        # 正常的 KPI 卡片
+        card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
+        card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
+
+    # [修正] 體積顯示區塊 - 根據 DRC 決定顏色
+    if drc_failed:
+        vol_bg = "#ffebee" # 淺紅
+        vol_border = "#e74c3c" # 紅
+        vol_title = "#c0392b"
+        vol_text = "N/A"
+    else:
+        vol_bg = "#e6fffa" # 淺綠
+        vol_border = "#00b894" # 綠
+        vol_title = "#006266"
+        vol_text = f"{round(Volume_L, 2)} L"
 
     st.markdown(f"""
-    <div style="background-color: #e6fffa; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid #00b894; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
-        <h3 style="color: #006266; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3>
-        <h1 style="color: #00b894; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{round(Volume_L, 2)} L</h1>
+    <div style="background-color: {vol_bg}; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid {vol_border}; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
+        <h3 style="color: {vol_title}; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3>
+        <h1 style="color: {vol_border}; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{vol_text}</h1>
     </div>
     """, unsafe_allow_html=True)
 
-# --- Tab 4: 3D 模擬視圖 (新增 + Fin Structure + Centered + Improved Style) ---
+# --- Tab 4: 3D 模擬視圖 ---
 with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
-    if L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
+    # [修正] 3D 圖也需要檢查 DRC
+    if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         
-        # --- 定義材質顏色 (CAD 風格) ---
-        COLOR_FINS = '#E5E7E9'  # 鋁原色 (Aluminum Light Grey)
-        COLOR_BODY = COLOR_FINS # [修正] 底座改為與鰭片同色 (統一鋁質感)
-        
-        # --- 定義光照參數 (Metallic Look) ---
-        LIGHTING_METAL = dict(
-            ambient=0.5,
-            diffuse=0.8,
-            specular=0.5,  # 高反光
-            roughness=0.1  # 低粗糙度 (光滑)
-        )
-        
-        LIGHTING_MATTE = dict(
-            ambient=0.6,
-            diffuse=0.8,
-            specular=0.1,  # 低反光
-            roughness=0.8  # 高粗糙度 (霧面)
-        )
+        COLOR_FINS = '#E5E7E9'
+        COLOR_BODY = COLOR_FINS
+        LIGHTING_METAL = dict(ambient=0.5, diffuse=0.8, specular=0.5, roughness=0.1)
+        LIGHTING_MATTE = dict(ambient=0.6, diffuse=0.8, specular=0.1, roughness=0.8)
 
-        # --- 1. 繪製底部電子艙 (Body: Shield + Filter) ---
+        # 1. 電子艙
         h_body = H_shield + H_filter
-        
         fig_3d.add_trace(go.Mesh3d(
             x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0],
             y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk],
@@ -507,16 +546,12 @@ with tab_3d:
             i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
             j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
             k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=COLOR_BODY,
-            lighting=LIGHTING_MATTE,
-            flatshading=True,
-            name='Electronics Body'
+            color=COLOR_BODY, lighting=LIGHTING_MATTE, flatshading=True, name='Electronics Body'
         ))
         
-        # --- 2. 繪製散熱底板 (Base Plate) ---
+        # 2. 散熱底板
         z_base_start = h_body
         z_base_end = h_body + t_base
-        
         fig_3d.add_trace(go.Mesh3d(
             x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0],
             y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk],
@@ -524,31 +559,19 @@ with tab_3d:
             i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
             j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
             k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=COLOR_FINS,
-            lighting=LIGHTING_METAL, # 金屬質感
-            flatshading=True,
-            name='Heatsink Base'
+            color=COLOR_FINS, lighting=LIGHTING_METAL, flatshading=True, name='Heatsink Base'
         ))
         
-        # --- 3. 繪製鰭片 (Fins) - Centered ---
-        fin_x = []
-        fin_y = []
-        fin_z = []
-        fin_i = []
-        fin_j = []
-        fin_k = []
-        
-        z_fin_start = z_base_end
-        z_fin_end = z_base_end + Fin_Height
+        # 3. 鰭片
+        fin_x, fin_y, fin_z, fin_i, fin_j, fin_k = [], [], [], [], [], []
+        z_fin_start, z_fin_end = z_base_end, z_base_end + Fin_Height
         num_fins_int = int(Fin_Count)
-        
-        # 計算鰭片陣列總寬度 與 起始偏移量
         if num_fins_int > 0:
             total_fin_array_width = (num_fins_int * Fin_t) + ((num_fins_int - 1) * Gap)
             y_offset = (W_hsk - total_fin_array_width) / 2
         else:
             y_offset = 0
-        
+            
         base_i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
         base_j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
         base_k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
@@ -556,127 +579,72 @@ with tab_3d:
         for idx in range(num_fins_int):
             y_start = y_offset + idx * (Fin_t + Gap)
             y_end = y_start + Fin_t
-            
             if y_end > W_hsk: break
-                
             current_x = [0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0]
             current_y = [y_start, y_start, y_end, y_end, y_start, y_start, y_end, y_end]
             current_z = [z_fin_start, z_fin_start, z_fin_start, z_fin_start, z_fin_end, z_fin_end, z_fin_end, z_fin_end]
-            
             offset = len(fin_x)
-            fin_x.extend(current_x)
-            fin_y.extend(current_y)
-            fin_z.extend(current_z)
+            fin_x.extend(current_x); fin_y.extend(current_y); fin_z.extend(current_z)
             fin_i.extend([x + offset for x in base_i])
             fin_j.extend([x + offset for x in base_j])
             fin_k.extend([x + offset for x in base_k])
 
-        fig_3d.add_trace(go.Mesh3d(
-            x=fin_x, y=fin_y, z=fin_z,
-            i=fin_i, j=fin_j, k=fin_k,
-            color=COLOR_FINS,
-            lighting=LIGHTING_METAL, # 金屬質感
-            flatshading=True,
-            name='Fins'
-        ))
+        fig_3d.add_trace(go.Mesh3d(x=fin_x, y=fin_y, z=fin_z, i=fin_i, j=fin_j, k=fin_k, color=COLOR_FINS, lighting=LIGHTING_METAL, flatshading=True, name='Fins'))
         
-        # --- 4. 繪製外框線 (Wireframe) ---
+        # 4. 外框
         x_lines = [0, L_hsk, L_hsk, 0, 0, None, 0, L_hsk, L_hsk, 0, 0, None, 0, 0, None, L_hsk, L_hsk, None, L_hsk, L_hsk, None, 0, 0]
         y_lines = [0, 0, W_hsk, W_hsk, 0, None, 0, 0, W_hsk, W_hsk, 0, None, 0, 0, None, 0, 0, None, W_hsk, W_hsk, None, W_hsk, W_hsk]
         z_lines = [0, 0, 0, 0, 0, None, RRU_Height, RRU_Height, RRU_Height, RRU_Height, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height]
         
-        fig_3d.add_trace(go.Scatter3d(
-            x=x_lines, y=y_lines, z=z_lines,
-            mode='lines',
-            line=dict(color='black', width=2),
-            showlegend=False
-        ))
-
-        # [修正] 計算最大尺寸，作為統一的軸距基準
-        # 為了避免邊緣貼太死，乘上 1.1 倍
+        fig_3d.add_trace(go.Scatter3d(x=x_lines, y=y_lines, z=z_lines, mode='lines', line=dict(color='black', width=2), showlegend=False))
         max_dim = max(L_hsk, W_hsk, RRU_Height) * 1.1
-
         fig_3d.update_layout(
             scene=dict(
-                # 強制三個軸的數值範圍完全相同
-                xaxis=dict(title='Length (mm)', range=[0, max_dim], dtick=50), # 加 dtick 固定刻度方便檢查
-                yaxis=dict(title='Width (mm)', range=[0, max_dim], dtick=50),
-                zaxis=dict(title='Height (mm)', range=[0, max_dim], dtick=50), 
-                
-                # 強制 3D 盒子的長寬高顯示比例為 1:1:1 (正立方體)
-                aspectmode='manual', 
-                aspectratio=dict(x=1, y=1, z=1),
-                
-                # [新增] 使用「正交投影 (Orthographic)」消除透視變形，讓工程視圖更精準
-                camera=dict(
-                    projection=dict(type="orthographic"),
-                    eye=dict(x=1.2, y=1.2, z=1.2)
-                ),
+                xaxis=dict(title='Length', range=[0, max_dim], dtick=50),
+                yaxis=dict(title='Width', range=[0, max_dim], dtick=50),
+                zaxis=dict(title='Height', range=[0, max_dim], dtick=50),
+                aspectmode='manual', aspectratio=dict(x=1, y=1, z=1),
+                camera=dict(projection=dict(type="orthographic"), eye=dict(x=1.2, y=1.2, z=1.2)),
                 bgcolor='white'
             ),
-            margin=dict(l=0, r=0, b=0, t=0),
-            height=600
+            margin=dict(l=0, r=0, b=0, t=0), height=600
         )
-        
         st.plotly_chart(fig_3d, use_container_width=True)
-        
         c1, c2 = st.columns(2)
         c1.info(f"📐 **外觀尺寸：** 長 {L_hsk:.1f} x 寬 {W_hsk:.1f} x 高 {RRU_Height:.1f} mm")
         c2.success(f"⚡ **鰭片規格：** 數量 {num_fins_int} pcs | 高度 {Fin_Height:.1f} mm | 厚度 {Fin_t} mm | 間距 {Gap} mm")
-        
+    
+    elif drc_failed:
+        st.error("🚫 因設計參數不合理 (DRC Failed)，無法生成有效模型。")
     else:
         st.warning("⚠️ 無法繪製 3D 圖形，因為計算出的尺寸無效 (為 0)。請檢查元件清單與參數設定。")
 
-    # --- 新增：AI 寫實渲染生成流程 ---
+    # --- AI 寫實渲染生成流程 ---
     st.markdown("---")
     st.subheader("🎨 RRU寫實渲染生成流程(AI)")
-    st.markdown("""
-    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef;">
-        <h4 style="margin-top:0;">準備工作</h4>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 步驟 1
-    col_step1_1, col_step1_2 = st.columns([1, 1])
-    with col_step1_1:
+    st.markdown("""<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef;"><h4 style="margin-top:0;">準備工作</h4></div>""", unsafe_allow_html=True)
+    c1, c2 = st.columns([1, 1])
+    with c1:
         st.markdown("#### Step 1. 下載 3D 模擬圖")
         st.info("請將滑鼠移至上方 3D 圖表的右上角，點擊相機圖示 **(Download plot as a png)** 下載目前的模型底圖。")
-    
-    with col_step1_2:
+    with c2:
         st.markdown("#### Step 2. 下載I/O寫實參考圖")
-        
-        # 自動載入預設圖片
-        default_ref_bytes = None
-        default_ref_name = None
-        default_ref_type = None
-        
+        default_ref_bytes = None; default_ref_name = None; default_ref_type = None
         default_files = ['reference_style.png', 'reference_style.jpg', 'reference_style.jpeg']
         for filename in default_files:
             if os.path.exists(filename):
                 with open(filename, "rb") as f:
-                    default_ref_bytes = f.read()
-                    default_ref_name = filename
+                    default_ref_bytes = f.read(); default_ref_name = filename; 
                     ext = filename.split('.')[-1].lower()
-                    if ext == 'png': default_ref_type = 'image/png'
-                    elif ext in ['jpg', 'jpeg']: default_ref_type = 'image/jpeg'
+                    default_ref_type = 'image/png' if ext == 'png' else 'image/jpeg'
                 break
-        
-        if default_ref_bytes is not None:
+        if default_ref_bytes:
             st.image(default_ref_bytes, caption=f"系統預設參考圖: {default_ref_name}", width=200)
-            st.download_button(
-                label="⬇️ 下載原始高解析度圖檔",
-                data=default_ref_bytes,
-                file_name=default_ref_name,
-                mime=default_ref_type,
-                key="download_ref_img"
-            )
+            st.download_button(label="⬇️ 下載原始高解析度圖檔", data=default_ref_bytes, file_name=default_ref_name, mime=default_ref_type, key="download_ref_img")
         else:
             st.warning("⚠️ 系統中找不到預設參考圖 (reference_style.png)。請確認檔案已上傳至 GitHub。")
 
-    # 步驟 2 (Prompt 生成)
     st.markdown("#### Step 3. 複製提示詞 (Prompt)")
-    
-    # 自動生成 Prompt (Chinese) - [修正] 使用者指定詳細內容 + 動態參數
     prompt_template = f"""
 5G RRU 無線射頻單元工業設計渲染圖
 
@@ -695,93 +663,12 @@ with tab_3d:
 視覺規格：
 一律生成3D等角視圖，且角度要和第一張模擬圖的視角角位相同（Isometric view），純白背景，8k 高解析度，照片級真實影像渲染。
     """.strip()
-
-    # [修正] text_area 讓使用者編輯
-    user_prompt = st.text_area(
-        label="您可以在此直接修改提示詞 (編輯後請點擊下方按鈕複製)：",
-        value=prompt_template,
-        height=300,
-        help="此欄位已預填入當前模型的尺寸參數，您可以自由修改材質或風格描述。"
-    )
-    
-    # [新增] 透過 iframe 嵌入 JavaScript 複製按鈕
-    # 注意：在 text_area 中若有反引號(`) 需要跳脫，以免 JS 報錯
+    user_prompt = st.text_area(label="您可以在此直接修改提示詞：", value=prompt_template, height=300)
     safe_prompt = user_prompt.replace('`', '\`')
-    
-    components.html(
-        f"""
-        <script>
-        function copyToClipboard() {{
-            const text = `{safe_prompt}`;
-            // 嘗試使用 navigator.clipboard (現代瀏覽器)
-            if (navigator.clipboard && window.isSecureContext) {{
-                navigator.clipboard.writeText(text).then(function() {{
-                    document.getElementById('status').innerHTML = "✅ 已複製！";
-                    setTimeout(() => {{ document.getElementById('status').innerHTML = ""; }}, 2000);
-                }}, function(err) {{
-                    fallbackCopy(text);
-                }});
-            }} else {{
-                fallbackCopy(text);
-            }}
-        }}
-        
-        function fallbackCopy(text) {{
-            // 備用方案：建立隱藏 textarea
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {{
-                document.execCommand('copy');
-                document.getElementById('status').innerHTML = "✅ 已複製！";
-            }} catch (err) {{
-                document.getElementById('status').innerHTML = "❌ 複製失敗";
-            }}
-            document.body.removeChild(textArea);
-            setTimeout(() => {{ document.getElementById('status').innerHTML = ""; }}, 2000);
-        }}
-        </script>
-        
-        <div style="display: flex; align-items: center; font-family: 'Microsoft JhengHei', sans-serif;">
-            <button onclick="copyToClipboard()" style="
-                background-color: #ffffff;
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-size: 14px;
-                cursor: pointer;
-                color: #31333F;
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                transition: all 0.2s;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            " onmouseover="this.style.borderColor='#ff4b4b'; this.style.color='#ff4b4b'" onmouseout="this.style.borderColor='#d1d5db'; this.style.color='#31333F'">
-                📋 複製提示詞 (Copy Prompt)
-            </button>
-            <span id="status" style="margin-left: 10px; color: #00b894; font-size: 14px; font-weight: bold;"></span>
-        </div>
-        """,
-        height=50
-    )
+    components.html(f"""<script>function copyToClipboard(){{const text=`{safe_prompt}`;if(navigator.clipboard&&window.isSecureContext){{navigator.clipboard.writeText(text).then(function(){{document.getElementById('status').innerHTML="✅ 已複製！";setTimeout(()=>{{document.getElementById('status').innerHTML="";}},2000)}},function(err){{fallbackCopy(text)}})}}else{{fallbackCopy(text)}}}}function fallbackCopy(text){{const textArea=document.createElement("textarea");textArea.value=text;textArea.style.position="fixed";document.body.appendChild(textArea);textArea.focus();textArea.select();try{{document.execCommand('copy');document.getElementById('status').innerHTML="✅ 已複製！"}}catch(err){{document.getElementById('status').innerHTML="❌ 複製失敗"}}document.body.removeChild(textArea);setTimeout(()=>{{document.getElementById('status').innerHTML="";}},2000)}}</script><div style="display: flex; align-items: center; font-family: 'Microsoft JhengHei', sans-serif;"><button onclick="copyToClipboard()" style="background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 4px; padding: 8px 16px; font-size: 14px; cursor: pointer; color: #31333F; display: flex; align-items: center; gap: 5px; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onmouseover="this.style.borderColor='#ff4b4b'; this.style.color='#ff4b4b'" onmouseout="this.style.borderColor='#d1d5db'; this.style.color='#31333F'">📋 複製提示詞 (Copy Prompt)</button><span id="status" style="margin-left: 10px; color: #00b894; font-size: 14px; font-weight: bold;"></span></div>""", height=50)
 
-    # 步驟 3 (Gemini 操作)
     st.markdown("#### Step 4. 執行 AI 生成")
-    st.success("""
-    1. 開啟 **Gemini** 對話視窗。
-    2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。
-    3. 依序上傳兩張圖片：
-       - **第 1 張**：您剛剛下載的 **3D 模擬圖** (作為結構控制)。
-       - **第 2 張**：您準備的 **寫實參考圖** (作為風格控制)。
-    4. 貼上上方複製的 **提示詞 (Prompt)** 並送出。
-    """)
+    st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.50 Restored Final | Designed for High Efficiency
-</div>
-""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.51 Physics Guardrails | Designed for High Efficiency</div>""", unsafe_allow_html=True)
