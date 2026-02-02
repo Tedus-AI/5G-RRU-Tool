@@ -8,12 +8,11 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.39 (Dynamic Prompt Update)
+# 版本：v3.40 (Title Update)
 # 日期：2026-02-02
 # 修正重點：
-# 1. Tab 4 提示詞更新：
-#    - 內容替換為使用者指定的中文版本 (白色粉體烤漆材質)。
-#    - 結構參數 (長寬高、鰭片數) 與 Tab 3 計算結果完全連動。
+# 1. Tab 4 標題更新：
+#    - 將 "AI 寫實渲染生成流程" 修改為 "RRU寫實渲染生成流程(AI)"。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -595,7 +594,7 @@ with tab_3d:
 
     # --- 新增：AI 寫實渲染生成流程 ---
     st.markdown("---")
-    st.subheader("🎨 AI 寫實渲染生成流程")
+    st.subheader("🎨 RRU寫實渲染生成流程(AI)")
     st.markdown("""
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef;">
         <h4 style="margin-top:0;">準備工作</h4>
@@ -776,6 +775,6 @@ with tab_3d:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>
-    5G RRU Thermal Engine | v3.39 Dynamic Prompt Update | Designed for High Efficiency
+    5G RRU Thermal Engine | v3.40 Title Update | Designed for High Efficiency
 </div>
 """, unsafe_allow_html=True)
