@@ -8,12 +8,12 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.62 (Fin Efficiency Selectbox)
+# 版本：v3.63 (Force Update Selectbox)
 # 日期：2026-02-04
 # 修正重點：
-# 1. [UI] 側邊欄「鰭片效率」改為下拉式選單：
-#    - Embedded Fin (埋入式) -> 自動帶入 0.95
-#    - Die-casting Fin (壓鑄式) -> 自動帶入 0.90
+# 1. [UI] 強制更新側邊欄「鰭片效率」為下拉式選單 (Selectbox)。
+#    - 選項：Embedded Fin (0.95) / Die-casting Fin (0.90)。
+#    - 若看到標題為 "鰭片效率 (Fin Tech)" 代表更新成功。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -131,9 +131,9 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     Margin = st.number_input("設計安全係數 (Margin)", value=1.0, step=0.1)
     Slope = 0.03 
     
-    # [修正] 鰭片效率改為下拉選單
+    # [修正 v3.63] 鰭片效率改為下拉選單，標題強制更新
     fin_tech = st.selectbox(
-        "鰭片製程 (Fin Efficiency)", 
+        "鰭片效率 (Fin Tech)", 
         ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"]
     )
     if "Embedded" in fin_tech:
@@ -535,6 +535,8 @@ with tab_viz:
     # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
+        
+        # 灰色佔位卡片
         st.markdown(f"""
         <div style="display:flex; gap:20px;">
             <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
@@ -678,4 +680,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.62 Fin Efficiency Selectbox | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.63 Force Update Selectbox | Designed for High Efficiency</div>""", unsafe_allow_html=True)
