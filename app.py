@@ -8,10 +8,13 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.58 (Rename Gap Label)
+# 版本：v3.59 (Precise Fin Count)
 # 日期：2026-02-03
 # 修正重點：
-# 1. [UI] 側邊欄顯示名稱更新：將 "鰭片間距" 修改為 "鰭片air gap"。
+# 1. [核心] 優化鰭片數量計算公式：
+#    - 改用 "植樹原理" ((W + Gap) / (Fin + Gap)) 計算最大可容納數量。
+#    - 加入 while 迴圈驗證，防止計算出的總寬度超出機構限制。
+#    - 能在有限寬度內擠入更多鰭片，提升運算真實度。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -303,10 +306,23 @@ else:
     Total_Watts_Sum = 0; Min_dT_Allowed = 50; Bottleneck_Name = "None"
 
 L_hsk, W_hsk = L_pcb + Top + Btm, W_pcb + Left + Right
-Fin_Count = W_hsk / (Gap + Fin_t)
 
-# [Fix] 全域計算 num_fins_int，確保 AI 提示詞與 3D 繪圖皆可引用
-num_fins_int = int(Fin_Count) if Fin_Count > 0 else 0
+# [修正] 精確計算鰭片數量 (植樹原理 + 邊界檢查)
+if Gap + Fin_t > 0:
+    # 理論最大數量
+    num_fins_float = (W_hsk + Gap) / (Gap + Fin_t)
+    num_fins_int = int(num_fins_float)
+    
+    # 驗證總寬度 (防浮點數誤差)
+    if num_fins_int > 0:
+        total_width = num_fins_int * Fin_t + (num_fins_int - 1) * Gap
+        while total_width > W_hsk and num_fins_int > 0:
+            num_fins_int -= 1
+            total_width = num_fins_int * Fin_t + (num_fins_int - 1) * Gap
+else:
+    num_fins_int = 0
+
+Fin_Count = num_fins_int # 更新計算用變數
 
 Total_Power = Total_Watts_Sum * Margin
 if Total_Power > 0 and Min_dT_Allowed > 0:
@@ -659,4 +675,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.57 AR Design Tip Added | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.59 Precise Fin Count | Designed for High Efficiency</div>""", unsafe_allow_html=True)
