@@ -8,12 +8,13 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.63 (Force Update Selectbox)
+# 版本：v3.64 (Force UI Refresh)
 # 日期：2026-02-04
 # 修正重點：
-# 1. [UI] 強制更新側邊欄「鰭片效率」為下拉式選單 (Selectbox)。
-#    - 選項：Embedded Fin (0.95) / Die-casting Fin (0.90)。
-#    - 若看到標題為 "鰭片效率 (Fin Tech)" 代表更新成功。
+# 1. [UI Fix] 強制解決「鰭片效率」介面未更新問題：
+#    - 使用 key="fin_tech_selector_v2" 強制 Streamlit 重新渲染元件。
+#    - 標題更新為 "🔨 鰭片製程 (Fin Tech)" 以利辨識。
+#    - 增加 st.toast 提示，確保使用者知道新版程式碼已載入。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -56,9 +57,10 @@ def check_password():
 if not check_password():
     st.stop()
 
-if "welcome_shown" not in st.session_state:
-    st.toast('🎉 登入成功！歡迎回到熱流運算引擎', icon="✅")
-    st.session_state["welcome_shown"] = True
+# [新增] 版本更新提示 (確保使用者知道程式碼已更新)
+if "v3.64_shown" not in st.session_state:
+    st.toast('🚀 系統已更新至 v3.64！介面強制重整完成。', icon="✅")
+    st.session_state["v3.64_shown"] = True
 
 # ==================================================
 # 👇 主程式
@@ -131,15 +133,21 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     Margin = st.number_input("設計安全係數 (Margin)", value=1.0, step=0.1)
     Slope = 0.03 
     
-    # [修正 v3.63] 鰭片效率改為下拉選單，標題強制更新
+    # [UI 強制更新] 鰭片效率改為下拉選單
+    # 使用 key="fin_tech_selector_v2" 確保 Streamlit 重新建立元件
     fin_tech = st.selectbox(
-        "鰭片效率 (Fin Tech)", 
-        ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"]
+        "🔨 鰭片製程 (Fin Tech)", 
+        ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"],
+        key="fin_tech_selector_v2"
     )
+    
     if "Embedded" in fin_tech:
         Eff = 0.95
     else:
         Eff = 0.90
+    
+    # 顯示確認數值
+    st.caption(f"目前設定效率 (Eff): **{Eff}**")
 
 with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
     L_pcb = st.number_input("PCB 長度 (mm)", value=350)
@@ -680,4 +688,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.63 Force Update Selectbox | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.64 Force UI Refresh | Designed for High Efficiency</div>""", unsafe_allow_html=True)
