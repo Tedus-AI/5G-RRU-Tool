@@ -8,12 +8,11 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.56 (Optimal AR Suggestion)
+# 版本：v3.57 (AR Design Tip Added)
 # 日期：2026-02-03
 # 修正重點：
-# 1. [UI] 側邊欄流阻比 (Aspect Ratio) 建議文字更新：
-#    - 由 "< 12.0" 修改為 "5.0 ~ 6.5" (綜合考量 h_conv + h_rad 的最佳區間)。
-#    - 實際紅燈阻擋門檻維持 > 12.0 (物理極限)，保留設計彈性。
+# 1. [UI] 側邊欄流阻比 (Aspect Ratio) 顯示優化：
+#    - 在最佳建議值下方新增工程提示："(建議值內，無風AR往低趨勢設計，反之亦然)"。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -347,7 +346,8 @@ if Fin_Height > 0:
         <small style="color: #666;">📐 流阻比 (Aspect Ratio)</small><br>
         <strong style="color: {ar_color}; font-size: 1.2rem;">{aspect_ratio:.1f}</strong> 
         <span style="color: {ar_color};">({ar_msg})</span><br>
-        <small style="color: #888;">✅ 最佳建議： 5.0 ~ 6.5</small>
+        <small style="color: #888;">✅ 最佳建議： 5.0 ~ 6.5</small><br>
+        <small style="color: #999; font-size: 0.8em;">(建議值內，無風AR往低趨勢設計，反之亦然)</small>
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -660,4 +660,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.56 Optimal AR Suggestion | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.57 AR Design Tip Added | Designed for High Efficiency</div>""", unsafe_allow_html=True)
