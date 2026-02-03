@@ -8,19 +8,14 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.54 (Final Fixed + 3-Step DRC)
+# 版本：v3.55 (Sidebar UI Enhanced)
 # 日期：2026-02-03
-# 狀態：正式發布版 (含自動 h 計算 + 三步驟 DRC 防呆機制)
-# 
-# 功能總結：
-# 1. [核心] 自動計算熱對流係數 h (C_decay=7.0)。
-# 2. [DRC] 設計規則檢查 (防止不合理參數)：
-#    - 檢查 1 (優先): 流阻比 (Aspect Ratio) > 12 -> 氣塞 (Choked Flow)。
-#    - 檢查 2 (效能): 對流係數 (h_conv) < 4.0 -> 散熱效率過低 (Poor Convection)。
-#    - 檢查 3 (極限): 絕對間距 (Gap) < 4mm -> 自然對流失效。
-#    - 失敗處理: 顯示紅色警報，隱藏 3D 視圖與 AI 提示詞。
-# 3. [Fix] 修復 NameError: 確保 num_fins_int 在全域範圍內計算。
-# 4. [AI] 渲染工作流: 提示詞連動尺寸與鰭片數，提供一鍵複製。
+# 修正重點：
+# 1. [UI] 側邊欄 h 值顯示優化：格式改為 (h_conv: ... + h_rad: ...)，並加註建議值。
+# 2. [UI] 側邊欄新增 Aspect Ratio 即時顯示：
+#    - 使用 st.empty() 佔位符技術。
+#    - 當主程式算出高度後，自動回填流阻比至側邊欄，並提供紅/綠燈與設計建議 (< 12)。
+# 3. [Core] 保留 v3.54 的所有 DRC 邏輯與 AI 生成流程。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -168,21 +163,24 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
     Fin_t = c_fin2.number_input("鰭片厚度 (mm)", value=1.2, step=0.1)
 
     # [v3.50] h 值自動計算邏輯 (物理模型)
-    # 1. 對流 (Convection): 使用 tanh 模擬邊界層干涉，C_decay = 7.0
     h_conv = 6.4 * np.tanh(Gap / 7.0)
-    
-    # 2. 輻射 (Radiation): 使用視因子修正，臨界 Gap=10mm
     if Gap >= 10.0:
         rad_factor = 1.0
     else:
         rad_factor = np.sqrt(Gap / 10.0)
     h_rad = 2.4 * rad_factor
-    
-    # 3. 總和
     h_value = h_conv + h_rad
     
-    # [新增] 顯示計算結果
-    st.info(f"🔥 **自動計算熱對流係數 h: {h_value:.2f}**\n\n(對流 {h_conv:.2f} + 輻射 {h_rad:.2f})")
+    # [UI 優化] 顯示計算結果 & 建議值
+    if h_value < 5.0:
+        st.error(f"🔥 **h 值過低警告: {h_value:.2f}** (對流受阻)")
+    else:
+        st.info(f"🔥 **自動計算 h: {h_value:.2f}**\n\n(h_conv: {h_conv:.2f} + h_rad: {h_rad:.2f})")
+    
+    st.caption("✅ **設計建議：** h_conv 應 ≥ 4.0")
+
+    # [UI 優化] 預留 Aspect Ratio 顯示位置 (等待主程式算出高度後回填)
+    ar_status_box = st.empty()
 
 with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c1, c2 = st.columns(2)
@@ -331,10 +329,30 @@ else:
 # [新增] 設計規則檢查 (DRC) - v3.54 新增功能
 # ==================================================
 # 計算流阻比
-if Gap > 0:
+if Gap > 0 and Fin_Height > 0:
     aspect_ratio = Fin_Height / Gap
 else:
-    aspect_ratio = 999
+    aspect_ratio = 0
+
+# [UI 優化] 更新側邊欄的 Aspect Ratio 資訊 (回填)
+if aspect_ratio > 12.0:
+    ar_color = "#e74c3c" # Red
+    ar_msg = "過高 (High)"
+else:
+    ar_color = "#00b894" # Green
+    ar_msg = "良好 (Good)"
+
+if Fin_Height > 0:
+    ar_status_box.markdown(f"""
+    <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-top: 10px; background-color: white;">
+        <small style="color: #666;">📐 流阻比 (Aspect Ratio)</small><br>
+        <strong style="color: {ar_color}; font-size: 1.2rem;">{aspect_ratio:.1f}</strong> 
+        <span style="color: {ar_color};">({ar_msg})</span><br>
+        <small style="color: #888;">✅ 設計建議： < 12.0</small>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    ar_status_box.info("等待計算 Aspect Ratio...")
 
 drc_failed = False
 drc_msg = ""
@@ -494,8 +512,6 @@ with tab_viz:
     # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
-        
-        # 灰色佔位卡片
         st.markdown(f"""
         <div style="display:flex; gap:20px;">
             <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
@@ -506,14 +522,10 @@ with tab_viz:
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # 紅色 N/A 體積區塊
         vol_bg = "#ffebee"; vol_border = "#e74c3c"; vol_title = "#c0392b"; vol_text = "N/A"
     else:
-        # 正常卡片
         card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
         card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
-        # 正常綠色體積區塊
         vol_bg = "#e6fffa"; vol_border = "#00b894"; vol_title = "#006266"; vol_text = f"{round(Volume_L, 2)} L"
 
     st.markdown(f"""
@@ -528,7 +540,6 @@ with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
-    # [修正] 3D 圖也受 DRC 控制
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
@@ -643,4 +654,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.54 Final Fixed (3-Step DRC) | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.55 Sidebar UI Enhanced | Designed for High Efficiency</div>""", unsafe_allow_html=True)
