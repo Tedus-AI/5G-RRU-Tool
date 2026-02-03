@@ -8,13 +8,12 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.59 (Precise Fin Count)
+# 版本：v3.60 (Debug Edition)
 # 日期：2026-02-03
 # 修正重點：
-# 1. [核心] 優化鰭片數量計算公式：
-#    - 改用 "植樹原理" ((W + Gap) / (Fin + Gap)) 計算最大可容納數量。
-#    - 加入 while 迴圈驗證，防止計算出的總寬度超出機構限制。
-#    - 能在有限寬度內擠入更多鰭片，提升運算真實度。
+# 1. [核心] 再次確保「植樹原理」邏輯正確植入。
+# 2. [Debug] 在 Tab 3 新增「運算驗證」區塊，顯示詳細的鰭片數量計算過程，
+#    方便使用者確認 W_hsk, Gap, Fin_t 的實際數值。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -308,12 +307,13 @@ else:
 L_hsk, W_hsk = L_pcb + Top + Btm, W_pcb + Left + Right
 
 # [修正] 精確計算鰭片數量 (植樹原理 + 邊界檢查)
+# 邏輯：(總寬 + 間距) / (間距 + 鰭片厚度) 取整數，代表最大可容納的鰭片數
 if Gap + Fin_t > 0:
-    # 理論最大數量
     num_fins_float = (W_hsk + Gap) / (Gap + Fin_t)
     num_fins_int = int(num_fins_float)
     
-    # 驗證總寬度 (防浮點數誤差)
+    # 二次驗證：檢查總寬度是否真的放得下
+    # 總寬 = N * Fin + (N-1) * Gap
     if num_fins_int > 0:
         total_width = num_fins_int * Fin_t + (num_fins_int - 1) * Gap
         while total_width > W_hsk and num_fins_int > 0:
@@ -675,4 +675,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.59 Precise Fin Count | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.60 Debug Edition | Designed for High Efficiency</div>""", unsafe_allow_html=True)
