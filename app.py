@@ -9,13 +9,13 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.74 (Save Button Fix)
+# 版本：v3.75 (Auto-Reset Download)
 # 日期：2026-02-04
 # 修正重點：
-# 1. [Fix] 修復「下載按鈕」未顯示的問題。
-#    - 補上 "if trigger_generation:" 的處理邏輯。
-#    - 確保點擊「更新並產生」後，系統會正確打包資料並寫入 json_ready_to_download，
-#      最後再次 Rerun 以顯示下載按鈕。
+# 1. [Fix] 實作「過期資料防呆機制」：
+#    - 定義 reset_download_state() 函數。
+#    - 將所有輸入元件 (側邊欄參數 + 表格) 綁定 on_change=reset_download_state。
+#    - 只要使用者修改任何參數，下載按鈕就會自動消失，強制需重新生成檔案。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -84,6 +84,10 @@ if 'json_file_name' not in st.session_state:
     st.session_state['json_file_name'] = ""
 if 'trigger_generation' not in st.session_state:
     st.session_state['trigger_generation'] = False
+
+# [新增] 狀態重置函數 (當任何參數變動時呼叫)
+def reset_download_state():
+    st.session_state['json_ready_to_download'] = None
 
 # ==================================================
 # 🔐 密碼保護
@@ -199,6 +203,7 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
                 if 'global_params' in data:
                     for k, v in data['global_params'].items():
                         st.session_state[k] = v
+                
                 # 還原表格
                 if 'components_data' in data:
                     new_df = pd.DataFrame(data['components_data'])
@@ -225,20 +230,19 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
         components_data = st.session_state['df_current'].to_dict('records')
         
         export_data = {
-            "meta": {"version": "v3.74", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
+            "meta": {"version": "v3.75", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
             "global_params": saved_params,
             "components_data": components_data
         }
         return json.dumps(export_data, indent=4)
 
-    # [修正] 處理觸發訊號並生成檔案
-    # 這是之前遺漏的關鍵邏輯，確保 Rerun 後能執行打包
+    # 處理觸發訊號並生成檔案
     if st.session_state.get('trigger_generation', False):
         json_data = get_current_state_json()
         st.session_state['json_ready_to_download'] = json_data
         st.session_state['json_file_name'] = f"RRU_Project_{time.strftime('%Y%m%d_%H%M%S')}.json"
         st.session_state['trigger_generation'] = False # 重置觸發器
-        st.rerun() # 再次 Rerun 以更新 UI 顯示下載按鈕
+        st.rerun() 
 
     st.markdown("---")
     
@@ -258,18 +262,18 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
     else:
         st.caption("ℹ️ 請先點擊上方按鈕以產生最新檔案")
 
-# --- 參數設定區 ---
+# --- 參數設定區 (綁定 on_change=reset_download_state) ---
 
 with st.sidebar.expander("1. 環境與係數", expanded=True):
-    # [修正] 移除 value，避免載入時衝突
-    T_amb = st.number_input("環境溫度 (°C)", step=1.0, key="T_amb")
-    Margin = st.number_input("設計安全係數 (Margin)", step=0.1, key="Margin")
+    T_amb = st.number_input("環境溫度 (°C)", step=1.0, key="T_amb", on_change=reset_download_state)
+    Margin = st.number_input("設計安全係數 (Margin)", step=0.1, key="Margin", on_change=reset_download_state)
     Slope = 0.03 
     
     fin_tech = st.selectbox(
         "🔨 鰭片製程 (Fin Tech)", 
         ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"],
-        key="fin_tech_selector_v2"
+        key="fin_tech_selector_v2",
+        on_change=reset_download_state
     )
     
     if "Embedded" in fin_tech:
@@ -279,32 +283,32 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     st.caption(f"目前設定效率 (Eff): **{Eff}**")
 
 with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
-    L_pcb = st.number_input("PCB 長度 (mm)", key="L_pcb")
-    W_pcb = st.number_input("PCB 寬度 (mm)", key="W_pcb")
-    t_base = st.number_input("散熱器基板厚 (mm)", key="t_base")
-    H_shield = st.number_input("HSK內腔深度 (mm)", key="H_shield")
-    H_filter = st.number_input("Cavity Filter 厚度 (mm)", key="H_filter")
+    L_pcb = st.number_input("PCB 長度 (mm)", key="L_pcb", on_change=reset_download_state)
+    W_pcb = st.number_input("PCB 寬度 (mm)", key="W_pcb", on_change=reset_download_state)
+    t_base = st.number_input("散熱器基板厚 (mm)", key="t_base", on_change=reset_download_state)
+    H_shield = st.number_input("HSK內腔深度 (mm)", key="H_shield", on_change=reset_download_state)
+    H_filter = st.number_input("Cavity Filter 厚度 (mm)", key="H_filter", on_change=reset_download_state)
     
     st.caption("📏 PCB板離外殼邊距(防水)")
     
     m1, m2 = st.columns(2)
-    Top = m1.number_input("Top (mm)", step=1.0, key="Top")
-    Btm = m2.number_input("Bottom (mm)", step=1.0, key="Btm")
+    Top = m1.number_input("Top (mm)", step=1.0, key="Top", on_change=reset_download_state)
+    Btm = m2.number_input("Bottom (mm)", step=1.0, key="Btm", on_change=reset_download_state)
     m3, m4 = st.columns(2)
-    Left = m3.number_input("Left (mm)", step=1.0, key="Left")
-    Right = m4.number_input("Right (mm)", step=1.0, key="Right")
+    Left = m3.number_input("Left (mm)", step=1.0, key="Left", on_change=reset_download_state)
+    Right = m4.number_input("Right (mm)", step=1.0, key="Right", on_change=reset_download_state)
     
     st.markdown("---")
     st.caption("🔶 Final PA 銅塊設定")
     c1, c2 = st.columns(2)
-    Coin_L_Setting = c1.number_input("銅塊長 (mm)", step=1.0, key="Coin_L_Setting")
-    Coin_W_Setting = c2.number_input("銅塊寬 (mm)", step=1.0, key="Coin_W_Setting")
+    Coin_L_Setting = c1.number_input("銅塊長 (mm)", step=1.0, key="Coin_L_Setting", on_change=reset_download_state)
+    Coin_W_Setting = c2.number_input("銅塊寬 (mm)", step=1.0, key="Coin_W_Setting", on_change=reset_download_state)
 
     st.markdown("---")
     st.caption("🌊 鰭片幾何")
     c_fin1, c_fin2 = st.columns(2)
-    Gap = c_fin1.number_input("鰭片air gap (mm)", step=0.1, key="Gap")
-    Fin_t = c_fin2.number_input("鰭片厚度 (mm)", step=0.1, key="Fin_t")
+    Gap = c_fin1.number_input("鰭片air gap (mm)", step=0.1, key="Gap", on_change=reset_download_state)
+    Fin_t = c_fin2.number_input("鰭片厚度 (mm)", step=0.1, key="Fin_t", on_change=reset_download_state)
 
     # [Core] h 值自動計算
     h_conv = 6.4 * np.tanh(Gap / 7.0)
@@ -325,25 +329,25 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
 
 with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c1, c2 = st.columns(2)
-    K_Via = c1.number_input("Via 等效 K值", key="K_Via")
-    Via_Eff = c2.number_input("Via 製程係數", key="Via_Eff")
+    K_Via = c1.number_input("Via 等效 K值", key="K_Via", on_change=reset_download_state)
+    Via_Eff = c2.number_input("Via 製程係數", key="Via_Eff", on_change=reset_download_state)
     st.markdown("---") 
     st.caption("🔷 熱介面材料 (TIM)")
     c3, c4 = st.columns(2)
-    K_Putty = c3.number_input("K (Putty)", key="K_Putty")
-    t_Putty = c4.number_input("t (Putty)", key="t_Putty")
+    K_Putty = c3.number_input("K (Putty)", key="K_Putty", on_change=reset_download_state)
+    t_Putty = c4.number_input("t (Putty)", key="t_Putty", on_change=reset_download_state)
     c5, c6 = st.columns(2)
-    K_Pad = c5.number_input("K (Pad)", key="K_Pad")
-    t_Pad = c6.number_input("t (Pad)", key="t_Pad")
+    K_Pad = c5.number_input("K (Pad)", key="K_Pad", on_change=reset_download_state)
+    t_Pad = c6.number_input("t (Pad)", key="t_Pad", on_change=reset_download_state)
     c7, c8 = st.columns(2)
-    K_Grease = c7.number_input("K (Grease)", key="K_Grease")
-    t_Grease = c8.number_input("t (Grease)", format="%.3f", key="t_Grease")
+    K_Grease = c7.number_input("K (Grease)", key="K_Grease", on_change=reset_download_state)
+    t_Grease = c8.number_input("t (Grease)", format="%.3f", key="t_Grease", on_change=reset_download_state)
     st.markdown("---") 
     st.markdown("**🔘 Solder (錫片)**") 
     c9, c10 = st.columns(2)
-    K_Solder = c9.number_input("K (錫片)", key="K_Solder")
-    t_Solder = c10.number_input("t (錫片)", key="t_Solder")
-    Voiding = st.number_input("錫片空洞率 (Voiding)", key="Voiding")
+    K_Solder = c9.number_input("K (錫片)", key="K_Solder", on_change=reset_download_state)
+    t_Solder = c10.number_input("t (錫片)", key="t_Solder", on_change=reset_download_state)
+    Voiding = st.number_input("錫片空洞率 (Voiding)", key="Voiding", on_change=reset_download_state)
 
 # ==================================================
 # 3. 分頁與邏輯
@@ -367,14 +371,14 @@ with tab_input:
             "Pad_W": st.column_config.NumberColumn("Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度", format="%.1f"),
             "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
             "Board_Type": st.column_config.SelectboxColumn("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
-            # [修正] 移除 Solder 選項
             "TIM_Type": st.column_config.SelectboxColumn("介面材料", help="元件或銅塊底部與散熱器之間的TIM", options=["Grease", "Pad", "Putty", "None"], width="medium"),
             "R_jc": st.column_config.NumberColumn("熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
             "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
         },
         num_rows="dynamic",
         use_container_width=True,
-        key=f"editor_{st.session_state['editor_key']}" 
+        key=f"editor_{st.session_state['editor_key']}",
+        on_change=reset_download_state # [Fix] 表格變動也會觸發下載按鈕重置
     )
     
     # [Fix] 實時更新 df_current
@@ -551,7 +555,6 @@ with tab_data:
                 "R_int": st.column_config.NumberColumn("基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.4f"),
                 "R_TIM": st.column_config.NumberColumn("介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.4f"),
                 
-                # [修正 v3.67] 名詞一致化
                 "Board_Type": st.column_config.Column("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)"),
                 "TIM_Type": st.column_config.Column("介面材料", help="元件或銅塊底部與散熱器之間的TIM")
             },
@@ -647,7 +650,6 @@ with tab_viz:
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
     
-    # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
         st.markdown(f"""
@@ -678,7 +680,6 @@ with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
-    # [修正] 3D 圖也受 DRC 控制
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
@@ -793,4 +794,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.74 Save Button Fix | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.75 Auto-Reset Download | Designed for High Efficiency</div>""", unsafe_allow_html=True)
