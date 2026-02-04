@@ -464,7 +464,7 @@ if Fin_Height > 0:
         <small style="color: #666;">📐 流阻比 (Aspect Ratio)</small><br>
         <strong style="color: {ar_color}; font-size: 1.2rem;">{aspect_ratio:.1f}</strong> 
         <span style="color: {ar_color};">({ar_msg})</span><br>
-        <small style="color: #888;">✅ 最佳建議： 5.0 ~ 6.5</small><br>
+        <small style="color: #888;">✅ 最佳建議： 4.5 ~ 6.5</small><br>
         <small style="color: #999; font-size: 0.8em;">(建議值內，無風AR往低趨勢設計，反之亦然)</small>
     </div>
     """, unsafe_allow_html=True)
