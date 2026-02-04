@@ -9,16 +9,12 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.70 (Project Save/Load)
+# 版本：v3.71 (Session State Fix)
 # 日期：2026-02-04
 # 修正重點：
-# 1. [新增] 專案存取功能 (Project I/O)：
-#    - 位於側邊欄最上方。
-#    - 支援將當前所有設定 (含側邊欄參數與表格資料) 匯出為 JSON。
-#    - 支援讀取 JSON 檔案並自動還原所有設定。
-# 2. [架構] 全面導入 Session State：
-#    - 所有輸入元件皆綁定 key，以支援程式化更新。
-#    - 表格資料來源改為 st.session_state 驅動。
+# 1. [Fix] 修復載入 JSON 後出現 "widget created with default value" 錯誤。
+#    - 實作 "DEFAULT_GLOBALS" 字典與初始化迴圈。
+#    - 移除側邊欄 widget 的 'value' 參數，改由 session_state 統一控管。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -32,7 +28,28 @@ st.set_page_config(
 # ==================================================
 # 0. 初始化 Session State (預設資料)
 # ==================================================
-# 定義預設的元件清單資料
+
+# 1. 定義全域參數預設值 (解決載入衝突的關鍵)
+DEFAULT_GLOBALS = {
+    "T_amb": 45.0, "Margin": 1.0, 
+    "L_pcb": 350.0, "W_pcb": 250.0, "t_base": 7.0, "H_shield": 20.0, "H_filter": 42.0,
+    "Top": 11.0, "Btm": 13.0, "Left": 11.0, "Right": 11.0,
+    "Coin_L_Setting": 55.0, "Coin_W_Setting": 35.0,
+    "Gap": 13.2, "Fin_t": 1.2,
+    "K_Via": 30.0, "Via_Eff": 0.9,
+    "K_Putty": 9.1, "t_Putty": 0.5,
+    "K_Pad": 7.5, "t_Pad": 1.7,
+    "K_Grease": 3.0, "t_Grease": 0.05,
+    "K_Solder": 58.0, "t_Solder": 0.3, "Voiding": 0.75,
+    "fin_tech_selector_v2": "Embedded Fin (0.95)" # Selectbox default
+}
+
+# 2. 初始化全域參數 (若 state 中不存在則寫入預設值)
+for k, v in DEFAULT_GLOBALS.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# 3. 定義預設元件清單
 default_component_data = {
     "Component": ["Final PA", "Driver PA", "Pre Driver", "Circulator", "Cavity Filter", "CPU (FPGA)", "Si5518", "16G DDR", "Power Mod", "SFP"],
     "Qty": [4, 4, 4, 4, 1, 1, 1, 2, 1, 1],
@@ -47,15 +64,12 @@ default_component_data = {
     "TIM_Type": ["Solder", "Grease", "Grease", "Grease", "None", "Putty", "Pad", "Grease", "Grease", "Grease"]
 }
 
-# 初始化表格資料
 if 'df_current' not in st.session_state:
     st.session_state['df_current'] = pd.DataFrame(default_component_data)
 
-# 初始化表格重整金鑰 (用於強制重新渲染表格)
 if 'editor_key' not in st.session_state:
     st.session_state['editor_key'] = 0
 
-# 初始化檔案載入紀錄 (防止重複載入)
 if 'last_loaded_file' not in st.session_state:
     st.session_state['last_loaded_file'] = None
 
@@ -191,41 +205,26 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
                 st.error(f"❌ 檔案讀取失敗: {e}")
 
     # 2. 儲存功能 (準備資料)
-    # 收集當前所有 Input Widget 的值 (假設它們都在 session_state 中)
-    # 注意：必須在所有 widget 宣告 key 後才能抓到值，但這裡是預備動作
-    # 我們會在下方定義變數時加入 key
-    
-    # 這裡先定義一個函數來打包當前狀態 (稍後在按鈕觸發時使用)
     def get_current_state_json():
         # 收集所有有 key 的 widget 值
-        params_to_save = [
-            "T_amb", "Margin", "Slope", "fin_tech_selector_v2", 
-            "L_pcb", "W_pcb", "t_base", "H_shield", "H_filter",
-            "Top", "Btm", "Left", "Right", 
-            "Coin_L_Setting", "Coin_W_Setting",
-            "Gap", "Fin_t", "K_Via", "Via_Eff", 
-            "K_Putty", "t_Putty", "K_Pad", "t_Pad", 
-            "K_Grease", "t_Grease", "K_Solder", "t_Solder", "Voiding"
-        ]
+        params_to_save = list(DEFAULT_GLOBALS.keys())
         
         saved_params = {}
         for k in params_to_save:
             if k in st.session_state:
                 saved_params[k] = st.session_state[k]
         
-        # 收集表格資料 (從 session_state 的 df_current 抓取)
-        # 注意：df_current 會在主程式末端被更新為最新的編輯結果
+        # 收集表格資料
         components_data = st.session_state['df_current'].to_dict('records')
         
         export_data = {
-            "meta": {"version": "v3.70", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
+            "meta": {"version": "v3.71", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
             "global_params": saved_params,
             "components_data": components_data
         }
         return json.dumps(export_data, indent=4)
 
     # 顯示下載按鈕
-    # 注意：這裡使用 callback 確保下載的是最新狀態
     json_str = get_current_state_json()
     st.download_button(
         label="💾 下載專案設定 (.json)",
@@ -234,15 +233,14 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
         mime="application/json"
     )
 
-# --- 參數設定區 (加入 Key 以支援 Save/Load) ---
+# --- 參數設定區 (移除 value=..., 完全依賴 session_state) ---
 
 with st.sidebar.expander("1. 環境與係數", expanded=True):
-    T_amb = st.number_input("環境溫度 (°C)", value=45.0, step=1.0, key="T_amb")
-    # [自動計算] h_value 已移除手動輸入
-    Margin = st.number_input("設計安全係數 (Margin)", value=1.0, step=0.1, key="Margin")
+    # [修正] 移除 value，避免載入時衝突
+    T_amb = st.number_input("環境溫度 (°C)", step=1.0, key="T_amb")
+    Margin = st.number_input("設計安全係數 (Margin)", step=0.1, key="Margin")
     Slope = 0.03 
     
-    # [UI] 鰭片效率下拉選單 (Force updated with key)
     fin_tech = st.selectbox(
         "🔨 鰭片製程 (Fin Tech)", 
         ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"],
@@ -256,32 +254,32 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     st.caption(f"目前設定效率 (Eff): **{Eff}**")
 
 with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
-    L_pcb = st.number_input("PCB 長度 (mm)", value=350, key="L_pcb")
-    W_pcb = st.number_input("PCB 寬度 (mm)", value=250, key="W_pcb")
-    t_base = st.number_input("散熱器基板厚 (mm)", value=7, key="t_base")
-    H_shield = st.number_input("HSK內腔深度 (mm)", value=20, key="H_shield")
-    H_filter = st.number_input("Cavity Filter 厚度 (mm)", value=42, key="H_filter")
+    L_pcb = st.number_input("PCB 長度 (mm)", key="L_pcb")
+    W_pcb = st.number_input("PCB 寬度 (mm)", key="W_pcb")
+    t_base = st.number_input("散熱器基板厚 (mm)", key="t_base")
+    H_shield = st.number_input("HSK內腔深度 (mm)", key="H_shield")
+    H_filter = st.number_input("Cavity Filter 厚度 (mm)", key="H_filter")
     
     st.caption("📏 PCB板離外殼邊距(防水)")
     
     m1, m2 = st.columns(2)
-    Top = m1.number_input("Top (mm)", value=11, step=1, key="Top")
-    Btm = m2.number_input("Bottom (mm)", value=13, step=1, key="Btm")
+    Top = m1.number_input("Top (mm)", step=1.0, key="Top")
+    Btm = m2.number_input("Bottom (mm)", step=1.0, key="Btm")
     m3, m4 = st.columns(2)
-    Left = m3.number_input("Left (mm)", value=11, step=1, key="Left")
-    Right = m4.number_input("Right (mm)", value=11, step=1, key="Right")
+    Left = m3.number_input("Left (mm)", step=1.0, key="Left")
+    Right = m4.number_input("Right (mm)", step=1.0, key="Right")
     
     st.markdown("---")
     st.caption("🔶 Final PA 銅塊設定")
     c1, c2 = st.columns(2)
-    Coin_L_Setting = c1.number_input("銅塊長 (mm)", value=55.0, step=1.0, key="Coin_L_Setting")
-    Coin_W_Setting = c2.number_input("銅塊寬 (mm)", value=35.0, step=1.0, key="Coin_W_Setting")
+    Coin_L_Setting = c1.number_input("銅塊長 (mm)", step=1.0, key="Coin_L_Setting")
+    Coin_W_Setting = c2.number_input("銅塊寬 (mm)", step=1.0, key="Coin_W_Setting")
 
     st.markdown("---")
     st.caption("🌊 鰭片幾何")
     c_fin1, c_fin2 = st.columns(2)
-    Gap = c_fin1.number_input("鰭片air gap (mm)", value=13.2, step=0.1, key="Gap")
-    Fin_t = c_fin2.number_input("鰭片厚度 (mm)", value=1.2, step=0.1, key="Fin_t")
+    Gap = c_fin1.number_input("鰭片air gap (mm)", step=0.1, key="Gap")
+    Fin_t = c_fin2.number_input("鰭片厚度 (mm)", step=0.1, key="Fin_t")
 
     # [Core] h 值自動計算邏輯 (物理模型)
     h_conv = 6.4 * np.tanh(Gap / 7.0)
@@ -305,25 +303,25 @@ with st.sidebar.expander("2. PCB 與 機構尺寸", expanded=True):
 
 with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
     c1, c2 = st.columns(2)
-    K_Via = c1.number_input("Via 等效 K值", value=30.0, key="K_Via")
-    Via_Eff = c2.number_input("Via 製程係數", value=0.9, key="Via_Eff")
+    K_Via = c1.number_input("Via 等效 K值", key="K_Via")
+    Via_Eff = c2.number_input("Via 製程係數", key="Via_Eff")
     st.markdown("---") 
     st.caption("🔷 熱介面材料 (TIM)")
     c3, c4 = st.columns(2)
-    K_Putty = c3.number_input("K (Putty)", value=9.1, key="K_Putty")
-    t_Putty = c4.number_input("t (Putty)", value=0.5, key="t_Putty")
+    K_Putty = c3.number_input("K (Putty)", key="K_Putty")
+    t_Putty = c4.number_input("t (Putty)", key="t_Putty")
     c5, c6 = st.columns(2)
-    K_Pad = c5.number_input("K (Pad)", value=7.5, key="K_Pad")
-    t_Pad = c6.number_input("t (Pad)", value=1.7, key="t_Pad")
+    K_Pad = c5.number_input("K (Pad)", key="K_Pad")
+    t_Pad = c6.number_input("t (Pad)", key="t_Pad")
     c7, c8 = st.columns(2)
-    K_Grease = c7.number_input("K (Grease)", value=3.0, key="K_Grease")
-    t_Grease = c8.number_input("t (Grease)", value=0.05, format="%.3f", key="t_Grease")
+    K_Grease = c7.number_input("K (Grease)", key="K_Grease")
+    t_Grease = c8.number_input("t (Grease)", format="%.3f", key="t_Grease")
     st.markdown("---") 
     st.markdown("**🔘 Solder (錫片)**") 
     c9, c10 = st.columns(2)
-    K_Solder = c9.number_input("K (錫片)", value=58.0, key="K_Solder")
-    t_Solder = c10.number_input("t (錫片)", value=0.3, key="t_Solder")
-    Voiding = st.number_input("錫片空洞率 (Voiding)", value=0.75, key="Voiding")
+    K_Solder = c9.number_input("K (錫片)", key="K_Solder")
+    t_Solder = c10.number_input("t (錫片)", key="t_Solder")
+    Voiding = st.number_input("錫片空洞率 (Voiding)", key="Voiding")
 
 # ==================================================
 # 3. 分頁與邏輯
@@ -348,6 +346,7 @@ with tab_input:
             "Pad_W": st.column_config.NumberColumn("Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度", format="%.1f"),
             "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
             "Board_Type": st.column_config.SelectboxColumn("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
+            # [修正] 移除 Solder 選項
             "TIM_Type": st.column_config.SelectboxColumn("介面材料", help="元件或銅塊底部與散熱器之間的TIM", options=["Grease", "Pad", "Putty", "None"], width="medium"),
             "R_jc": st.column_config.NumberColumn("熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
             "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
@@ -520,6 +519,8 @@ with tab_data:
                 "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
                 "R_jc": st.column_config.NumberColumn("Rjc", help="結點到殼的內部熱阻", format="%.2f"),
                 "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f"),
+                
+                # 計算欄位 - 完整公式說明
                 "Base_L": st.column_config.NumberColumn("Base 長 (mm)", help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
                 "Base_W": st.column_config.NumberColumn("Base 寬 (mm)", help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
                 "Loc_Amb": st.column_config.NumberColumn("局部環溫 (°C)", help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。", format="%.1f"),
@@ -529,6 +530,7 @@ with tab_data:
                 "R_int": st.column_config.NumberColumn("基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.4f"),
                 "R_TIM": st.column_config.NumberColumn("介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.4f"),
                 
+                # [修正 v3.67] 名詞一致化
                 "Board_Type": st.column_config.Column("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)"),
                 "TIM_Type": st.column_config.Column("介面材料", help="元件或銅塊底部與散熱器之間的TIM")
             },
@@ -623,6 +625,7 @@ with tab_viz:
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
     
+    # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
         st.markdown(f"""
@@ -653,6 +656,7 @@ with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
+    # [修正] 3D 圖也受 DRC 控制
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
@@ -767,4 +771,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.70 Project Save/Load | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.71 Session State Fix | Designed for High Efficiency</div>""", unsafe_allow_html=True)
