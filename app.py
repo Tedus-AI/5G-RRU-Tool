@@ -393,6 +393,11 @@ elif Gap < 4.0:
     drc_failed = True
     drc_msg = f"⛔ **設計無效 (Gap Too Small)：** 鰭片間距 {Gap}mm 小於物理極限 (4mm)。\n邊界層完全重疊，自然對流失效。"
 
+# [新增] 檢查 4 (製程): Embedded Fin 高度限制 (> 100mm)
+elif "Embedded" in fin_tech and Fin_Height > 100.0:
+    drc_failed = True
+    drc_msg = f"⛔ **製程限制 (Process Limit)：** Embedded Fin (埋入式鰭片) 製程高度限制需 < 100mm (目前計算值: {Fin_Height:.1f}mm)。\n此高度已超過製程極限，請增加散熱面積、降低功耗或改選 Die-casting Fin。"
+
 # --- Tab 2: 詳細數據 (表二) ---
 with tab_data:
     st.subheader("🔢 詳細計算數據 (唯讀)")
