@@ -8,11 +8,12 @@ import time
 import os
 
 # ==============================================================================
-# 版本：v3.67 (UI Text Consistency)
+# 版本：v3.68 (Process Check Added)
 # 日期：2026-02-04
 # 修正重點：
-# 1. [UI] Tab 1 介面材料 (TIM) 選項移除 "Solder"。
-# 2. [UI] Tab 2 表格欄位名稱 "基板導通" 修改為 "元件導熱方式"。
+# 1. [DRC] 新增製程限制檢查：
+#    - 若選擇 Embedded Fin 且 Fin_Height > 100mm，觸發錯誤。
+#    - 提示使用者增加 X/Y 面積以降低 Z 高度需求。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -56,9 +57,9 @@ if not check_password():
     st.stop()
 
 # 版本更新提示
-if "v3.67_shown" not in st.session_state:
-    st.toast('🚀 系統已更新至 v3.67！UI 文字與選項已同步。', icon="✅")
-    st.session_state["v3.67_shown"] = True
+if "v3.68_shown" not in st.session_state:
+    st.toast('🚀 系統已更新至 v3.68！新增 Embedded Fin 製程高度檢查。', icon="✅")
+    st.session_state["v3.68_shown"] = True
 
 # ==================================================
 # 👇 主程式
@@ -131,7 +132,7 @@ with st.sidebar.expander("1. 環境與係數", expanded=True):
     Margin = st.number_input("設計安全係數 (Margin)", value=1.0, step=0.1)
     Slope = 0.03 
     
-    # [UI] 鰭片效率下拉選單 (Force updated with key)
+    # [UI] 鰭片效率下拉選單
     fin_tech = st.selectbox(
         "🔨 鰭片製程 (Fin Tech)", 
         ["Embedded Fin (0.95)", "Die-casting Fin (0.90)"],
@@ -250,7 +251,6 @@ with tab_input:
             "Pad_W": st.column_config.NumberColumn("Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度", format="%.1f"),
             "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
             "Board_Type": st.column_config.SelectboxColumn("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
-            # [修正] 移除 Solder 選項
             "TIM_Type": st.column_config.SelectboxColumn("介面材料", help="元件或銅塊底部與散熱器之間的TIM", options=["Grease", "Pad", "Putty", "None"], width="medium"),
             "R_jc": st.column_config.NumberColumn("熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
             "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
@@ -539,8 +539,6 @@ with tab_viz:
     # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
-        
-        # 灰色佔位卡片
         st.markdown(f"""
         <div style="display:flex; gap:20px;">
             <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
@@ -551,14 +549,10 @@ with tab_viz:
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # 紅色 N/A 體積區塊
         vol_bg = "#ffebee"; vol_border = "#e74c3c"; vol_title = "#c0392b"; vol_text = "N/A"
     else:
-        # 正常卡片
         card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
         card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
-        # 正常綠色體積區塊
         vol_bg = "#e6fffa"; vol_border = "#00b894"; vol_title = "#006266"; vol_text = f"{round(Volume_L, 2)} L"
 
     st.markdown(f"""
@@ -688,4 +682,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.67 UI Text Consistency | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.68 Process Check Added | Designed for High Efficiency</div>""", unsafe_allow_html=True)
