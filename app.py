@@ -9,14 +9,12 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.79 (UI Layout Optimization)
+# 版本：v3.80 (Default Config Fix)
 # 日期：2026-02-05
 # 修正重點：
-# 1. [UI] 調整「預設檔案載入」顯示樣式：改為精簡標題+燈號。
-# 2. [UI] 解決存檔按鈕位置問題：
-#    - 使用 st.empty() 佔位符技術。
-#    - 讓按鈕在視覺上回到側邊欄上方的「專案存取」區塊內。
-#    - 邏輯上依然維持在程式末端執行，確保資料更新無誤。
+# 1. [Fix] 修復預設設定檔載入不完全的問題：
+#    - 現在啟動時除了載入 global_params (側邊欄)，也會同步載入 components_data (Tab 1 表格)。
+#    - 確保 default_config.json 能完整覆蓋所有預設值。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -31,7 +29,7 @@ st.set_page_config(
 # 0. 初始化 Session State
 # ==================================================
 
-# 1. 全域參數預設值
+# 1. 全域參數預設值 (Hardcoded Fallback)
 DEFAULT_GLOBALS = {
     "T_amb": 45.0, "Margin": 1.0, 
     "L_pcb": 350.0, "W_pcb": 250.0, "t_base": 7.0, "H_shield": 20.0, "H_filter": 42.0,
@@ -46,30 +44,7 @@ DEFAULT_GLOBALS = {
     "fin_tech_selector_v2": "Embedded Fin (0.95)"
 }
 
-# 載入預設設定檔
-config_path = "default_config.json"
-config_loaded_msg = "🟡 使用內建預設值" # 預設訊息
-
-if os.path.exists(config_path):
-    try:
-        with open(config_path, "r", encoding='utf-8') as f:
-            custom_config = json.load(f)
-            if 'global_params' in custom_config:
-                DEFAULT_GLOBALS.update(custom_config['global_params'])
-                config_loaded_msg = "🟢 載入成功 (default_config.json)"
-            else:
-                config_loaded_msg = "🔴 格式錯誤 (Format Invalid)"
-    except Exception as e:
-        config_loaded_msg = f"🔴 讀取錯誤: {str(e)}"
-else:
-    config_loaded_msg = "🟡 使用內建預設值 (No Config File)"
-
-# 初始化 Session State
-for k, v in DEFAULT_GLOBALS.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-# 2. 預設元件清單
+# 2. 預設元件清單 (Hardcoded Fallback) - [移至讀取 JSON 之前定義]
 default_component_data = {
     "Component": ["Final PA", "Driver PA", "Pre Driver", "Circulator", "Cavity Filter", "CPU (FPGA)", "Si5518", "16G DDR", "Power Mod", "SFP"],
     "Qty": [4, 4, 4, 4, 1, 1, 1, 2, 1, 1],
@@ -84,6 +59,45 @@ default_component_data = {
     "TIM_Type": ["Solder", "Grease", "Grease", "Grease", "None", "Putty", "Pad", "Grease", "Grease", "Grease"]
 }
 
+# 3. 嘗試載入預設設定檔並覆蓋上述預設值
+config_path = "default_config.json"
+config_loaded_msg = "🟡 使用內建預設值" 
+
+if os.path.exists(config_path):
+    try:
+        with open(config_path, "r", encoding='utf-8') as f:
+            custom_config = json.load(f)
+            
+            # [修正] 同步載入全域變數與表格資料
+            loaded_globals = False
+            loaded_components = False
+            
+            if 'global_params' in custom_config:
+                DEFAULT_GLOBALS.update(custom_config['global_params'])
+                loaded_globals = True
+            
+            if 'components_data' in custom_config:
+                default_component_data = custom_config['components_data']
+                loaded_components = True
+            
+            if loaded_globals and loaded_components:
+                config_loaded_msg = "🟢 完整載入成功 (default_config.json)"
+            elif loaded_globals:
+                config_loaded_msg = "🟢 參數載入成功 (表格使用內建值)"
+            else:
+                config_loaded_msg = "🔴 格式異常 (Key Missing)"
+
+    except Exception as e:
+        config_loaded_msg = f"🔴 讀取錯誤: {str(e)}"
+else:
+    config_loaded_msg = "🟡 使用內建預設值 (No Config File)"
+
+# 初始化 Session State (全域參數)
+for k, v in DEFAULT_GLOBALS.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# 初始化 Session State (表格資料) - 使用剛才可能被 JSON 覆蓋過的 default_component_data
 if 'df_initial' not in st.session_state:
     st.session_state['df_initial'] = pd.DataFrame(default_component_data)
 
@@ -228,6 +242,7 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
                 if 'global_params' in data:
                     for k, v in data['global_params'].items():
                         st.session_state[k] = v
+                
                 # 還原表格
                 if 'components_data' in data:
                     new_df = pd.DataFrame(data['components_data'])
@@ -244,8 +259,7 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
 
     st.markdown("---")
     
-    # [修正] 預留一個「按鈕區」的空位
-    # 我們稍後會在程式最末端，把按鈕「填」進這個空位
+    # 預留按鈕區空位
     save_ui_placeholder = st.empty()
 
 # --- 參數設定區 (綁定 on_change=reset_download_state) ---
@@ -540,7 +554,6 @@ with tab_data:
                 "R_int": st.column_config.NumberColumn("基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.4f"),
                 "R_TIM": st.column_config.NumberColumn("介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.4f"),
                 
-                # [修正 v3.67] 名詞一致化
                 "Board_Type": st.column_config.Column("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)"),
                 "TIM_Type": st.column_config.Column("介面材料", help="元件或銅塊底部與散熱器之間的TIM")
             },
@@ -548,7 +561,6 @@ with tab_data:
             hide_index=True
         )
         
-        # [UI Update] 將 Scale Bar 移至下方，並改為橫式
         st.markdown(f"""
         <div style="display: flex; flex-direction: column; align-items: center; margin: 15px 0;">
             <div style="font-weight: bold; margin-bottom: 5px; color: #555; font-size: 0.9rem;">允許溫升 (Allowed dT) 色階參考</div>
@@ -637,7 +649,6 @@ with tab_viz:
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
     
-    # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
         st.markdown(f"""
@@ -668,7 +679,6 @@ with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
-    # [修正] 3D 圖也受 DRC 控制
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
@@ -783,7 +793,7 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.79 UI Layout Optimization | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.80 Default Config Fix | Designed for High Efficiency</div>""", unsafe_allow_html=True)
 # --- [Project I/O - Save] 邏輯與按鈕填入 ---
 with save_ui_placeholder.container():
     def get_current_state_json():
@@ -796,7 +806,7 @@ with save_ui_placeholder.container():
         components_data = st.session_state['df_current'].to_dict('records')
         
         export_data = {
-            "meta": {"version": "v3.79", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
+            "meta": {"version": "v3.80", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
             "global_params": saved_params,
             "components_data": components_data
         }
