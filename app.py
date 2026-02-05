@@ -9,13 +9,15 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.75 (Auto-Reset Download)
-# 日期：2026-02-04
-# 修正重點：
-# 1. [Fix] 實作「過期資料防呆機制」：
-#    - 定義 reset_download_state() 函數。
-#    - 將所有輸入元件 (側邊欄參數 + 表格) 綁定 on_change=reset_download_state。
-#    - 只要使用者修改任何參數，下載按鈕就會自動消失，強制需重新生成檔案。
+# 版本：v3.76 (Final Release - Stable)
+# 日期：2026-02-05
+# 狀態：正式發布版 (Production Ready)
+# 
+# [系統功能摘要]
+# 1. 核心計算：自動 h 值 (C=7.0)、植樹原理鰭片數、三階段 DRC 防呆。
+# 2. 檔案存取：JSON 專案檔 Save/Load，含表格資料完整還原。
+# 3. 資料安全：參數變動自動重置下載按鈕，防止過期資料 (Stale Data)。
+# 4. AI 介接：3D 正交視圖、參考圖下載、動態提示詞生成。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -85,7 +87,7 @@ if 'json_file_name' not in st.session_state:
 if 'trigger_generation' not in st.session_state:
     st.session_state['trigger_generation'] = False
 
-# [新增] 狀態重置函數 (當任何參數變動時呼叫)
+# [核心] 狀態重置函數 (當任何參數變動時呼叫，強制隱藏下載按鈕)
 def reset_download_state():
     st.session_state['json_ready_to_download'] = None
 
@@ -230,7 +232,7 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
         components_data = st.session_state['df_current'].to_dict('records')
         
         export_data = {
-            "meta": {"version": "v3.75", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
+            "meta": {"version": "v3.76", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
             "global_params": saved_params,
             "components_data": components_data
         }
@@ -371,6 +373,7 @@ with tab_input:
             "Pad_W": st.column_config.NumberColumn("Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度", format="%.1f"),
             "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
             "Board_Type": st.column_config.SelectboxColumn("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
+            # [修正] 移除 Solder 選項
             "TIM_Type": st.column_config.SelectboxColumn("介面材料", help="元件或銅塊底部與散熱器之間的TIM", options=["Grease", "Pad", "Putty", "None"], width="medium"),
             "R_jc": st.column_config.NumberColumn("熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
             "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f")
@@ -650,6 +653,7 @@ with tab_viz:
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
     
+    # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
         st.markdown(f"""
@@ -680,6 +684,7 @@ with tab_3d:
     st.subheader("🧊 RRU 3D 產品模擬圖")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
+    # [修正] 3D 圖也受 DRC 控制
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
@@ -794,4 +799,4 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.75 Auto-Reset Download | Designed for High Efficiency</div>""", unsafe_allow_html=True)
+st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.76 Final Release - Stable | Designed for High Efficiency</div>""", unsafe_allow_html=True)
