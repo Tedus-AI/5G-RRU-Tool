@@ -9,13 +9,19 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.87 (Tab Title Emoji Restore)
+# 版本：v3.88 (UI Polish & Relocate)
 # 日期：2026-02-08
-# 修正重點：
-# 1. [UI] Tab 標題格式優化：
-#    - 保留 Emoji 圖示。
-#    - 格式調整為 "Emoji ENGLISH (中文)" (e.g., "📝 COMPONENT SETUP (元件設定)")。
+# 狀態：正式發布版 (Production Ready)
+# 
+# [變更摘要]
+# 1. UI: 將「專案存檔」按鈕移至側邊欄頂部的 Expander 內 (使用 Placeholder 技術)。
+# 2. UI: 版本號移至主標題區塊顯示，移除底部 Footer。
+# 3. Core: 保持所有核心計算與防呆邏輯不變。
 # ==============================================================================
+
+# 定義版本資訊
+APP_VERSION = "v3.88"
+UPDATE_DATE = "2026-02-08"
 
 # === APP 設定 ===
 st.set_page_config(
@@ -29,7 +35,7 @@ st.set_page_config(
 # 0. 初始化 Session State
 # ==================================================
 
-# 1. 全域參數預設值 (Hardcoded Fallback)
+# 1. 全域參數預設值
 DEFAULT_GLOBALS = {
     "T_amb": 45.0, "Margin": 1.0, 
     "L_pcb": 350.0, "W_pcb": 250.0, "t_base": 7.0, "H_shield": 20.0, "H_filter": 42.0,
@@ -58,23 +64,18 @@ if os.path.exists(config_path):
             loaded_globals = False
             loaded_components = False
             
-            # 更新全域變數
             if 'global_params' in custom_config:
                 DEFAULT_GLOBALS.update(custom_config['global_params'])
                 loaded_globals = True
             
-            # 更新元件清單 (注意：這裡只是更新預設值變數，尚未寫入 DataFrame)
-            # 真正的 DataFrame 初始化在下方
             if 'components_data' in custom_config:
-                # 這裡暫存起來，稍後初始化 df_initial 時使用
-                # 但因為 Python 變數作用域特性，我們直接修改下方的 default_component_data 變數會更直觀
+                # 這裡僅更新變數，真正的 DataFrame 初始化在下方
                 pass 
                 
             if loaded_globals:
                 config_loaded_msg = "🟢 設定檔載入成功 (default_config.json)"
             else:
                 config_loaded_msg = "🔴 格式異常 (Key Missing)"
-
     except Exception as e:
         config_loaded_msg = f"🔴 讀取錯誤: {str(e)}"
 else:
@@ -85,7 +86,7 @@ for k, v in DEFAULT_GLOBALS.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# 2. 預設元件清單 (Hardcoded Fallback)
+# 2. 預設元件清單
 default_component_data = {
     "Component": ["Final PA", "Driver PA", "Pre Driver", "Circulator", "Cavity Filter", "CPU (FPGA)", "Si5518", "16G DDR", "Power Mod", "SFP"],
     "Qty": [4, 4, 4, 4, 1, 1, 1, 2, 1, 1],
@@ -164,21 +165,23 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 版本更新提示
-if "v3.86_shown" not in st.session_state:
-    st.toast('🚀 系統已更新至 v3.86！Tab 標題樣式已更新。', icon="✅")
-    st.session_state["v3.86_shown"] = True
+if "welcome_shown" not in st.session_state:
+    st.toast(f'🎉 登入成功！歡迎回到熱流運算引擎 ({APP_VERSION})', icon="✅")
+    st.session_state["welcome_shown"] = True
 
 # ==================================================
 # 👇 主程式開始
 # ==================================================
 
 # 標題
-st.markdown("""
+st.markdown(f"""
     <h1 style='text-align: center; background: -webkit-linear-gradient(45deg, #007CF0, #00DFD8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;'>
     📡 5G RRU 體積估算引擎 <span style='font-size: 20px; color: #888; -webkit-text-fill-color: #888;'>Pro</span>
     </h1>
-    <p style='text-align: center; color: #666;'>High-Performance Thermal Calculation System</p>
+    <div style='text-align: center; color: #666; font-size: 14px; margin-bottom: 20px;'>
+        High-Performance Thermal Calculation System 
+        <span style="color: #bbb; margin-left: 10px;">| {APP_VERSION} ({UPDATE_DATE})</span>
+    </div>
     <hr style="margin-top: 0;">
     """, unsafe_allow_html=True)
 
@@ -272,11 +275,10 @@ with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
 
     st.markdown("---")
     
-    # 預留按鈕區空位
+    # [修正] 預留按鈕區空位 (為了將按鈕顯示在上方，但邏輯在下方執行)
     save_ui_placeholder = st.empty()
 
-# --- 參數設定區 ---
-
+# --- 參數設定區 (綁定 on_change=reset_download_state + 讀取 value) ---
 with st.sidebar.expander("1. 環境與係數", expanded=True):
     T_amb = st.number_input("環境溫度 (°C)", step=1.0, key="T_amb", value=st.session_state['T_amb'], on_change=reset_download_state)
     Margin = st.number_input("設計安全係數 (Margin)", step=0.1, key="Margin", value=st.session_state['Margin'], on_change=reset_download_state)
@@ -372,7 +374,6 @@ with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
 # ==================================================
 # 3. 分頁與邏輯
 # ==================================================
-# [UI Fix] 標題格式統一：Emoji + 英文 (中文)
 tab_input, tab_data, tab_viz, tab_3d = st.tabs([
     "📝 COMPONENT SETUP (元件設定)", 
     "🔢 DETAILED ANALYSIS (詳細分析)", 
@@ -616,7 +617,7 @@ elif "Embedded" in fin_tech and Fin_Height > 100.0:
 
 # --- Tab 2: 詳細數據 (表二) ---
 with tab_data:
-    st.subheader("🔢 詳細計算數據 (唯讀)")
+    st.subheader("🔢 DETAILED ANALYSIS (詳細分析)")
     st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
     
     if not final_df.empty:
@@ -624,7 +625,6 @@ with tab_data:
         max_val = final_df['Allowed_dT'].max()
         mid_val = (min_val + max_val) / 2
         
-        # [修改] 移除原本的左右分欄 (col_table, col_legend)，改為全寬顯示
         styled_df = final_df.style.background_gradient(
             subset=['Allowed_dT'], 
             cmap='RdYlGn'
@@ -632,7 +632,6 @@ with tab_data:
             "R_int": "{:.4f}", "R_TIM": "{:.4f}", "Allowed_dT": "{:.2f}"
         })
         
-        # [修正 v3.66] 還原完整的 Help 說明 (包含物理公式)
         st.dataframe(
             styled_df, 
             column_config={
@@ -656,7 +655,7 @@ with tab_data:
                 "R_int": st.column_config.NumberColumn("基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.4f"),
                 "R_TIM": st.column_config.NumberColumn("介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.4f"),
                 
-                # [修正 v3.67] 名詞一致化
+                # 名詞一致化
                 "Board_Type": st.column_config.Column("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)"),
                 "TIM_Type": st.column_config.Column("介面材料", help="元件或銅塊底部與散熱器之間的TIM")
             },
@@ -685,7 +684,7 @@ with tab_data:
 
 # --- Tab 3: 視覺化報告 ---
 with tab_viz:
-    st.subheader("📊 熱流分析報告")
+    st.subheader("📊 VISUAL REPORT (視覺化報告)")
     
     def card(col, title, value, desc, color="#333"):
         col.markdown(f"""
@@ -753,7 +752,6 @@ with tab_viz:
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
     
-    # [修正] 根據 DRC 結果決定顯示內容
     if drc_failed:
         st.error(drc_msg)
         st.markdown(f"""
@@ -794,7 +792,7 @@ with tab_viz:
 
 # --- Tab 4: 3D 模擬視圖 ---
 with tab_3d:
-    st.subheader("🧊 RRU 3D 產品模擬圖")
+    st.subheader("🧊 3D SIMULATION (3D 模擬視圖)")
     st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
     
     # [修正] 3D 圖也受 DRC 控制
@@ -911,9 +909,8 @@ with tab_3d:
         st.markdown("#### Step 4. 執行 AI 生成")
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
-st.markdown("---")
-st.markdown("""<div style='text-align: center; color: #adb5bd; font-size: 12px; margin-top: 30px;'>5G RRU Thermal Engine | v3.86 Tab Title Update | Designed for High Efficiency</div>""", unsafe_allow_html=True)
-# --- [Project I/O - Save] 邏輯與按鈕填入 ---
+# --- [Project I/O - Save Logic] 移到底部執行 ---
+# 確保所有輸入參數與計算結果都已更新後，才執行儲存邏輯
 with save_ui_placeholder.container():
     def get_current_state_json():
         params_to_save = list(DEFAULT_GLOBALS.keys())
@@ -925,7 +922,7 @@ with save_ui_placeholder.container():
         components_data = st.session_state['df_current'].to_dict('records')
         
         export_data = {
-            "meta": {"version": "v3.86", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
+            "meta": {"version": APP_VERSION, "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")},
             "global_params": saved_params,
             "components_data": components_data
         }
