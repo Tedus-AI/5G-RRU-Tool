@@ -9,18 +9,18 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.90 (Header Fix & UI Restore)
+# 版本：v3.91 (Header Layout Refinement)
 # 日期：2026-02-08
-# 狀態：正式發布版 (Production Ready)
-# 
-# [修正內容]
-# 1. [Fix] 修復 NameError: 確保 Placehoder 變數名稱前後一致 (project_io_save_placeholder)。
-# 2. [UI] 還原按鈕文字: 恢復 "1. 更新並產生..." 與 "2. 下載專案設定..." 的完整描述。
-# 3. [UI] Header 佈局: 右上角控制台採用 Container 包覆，載入在上，存檔按鈕在下(左右並排)。
+# 修正重點：
+# 1. [UI] Header 右側控制台排版優化：
+#    - 採用左右分欄 (Columns) 設計，符合使用者提供的 UI 截圖。
+#    - 左側：顯示 "專案存取" 標題與狀態燈號。
+#    - 右側：顯示 "載入專案設定" 標題與上傳按鈕。
+#    - 確保左右標題字體樣式一致。
 # ==============================================================================
 
 # 定義版本資訊
-APP_VERSION = "v3.90"
+APP_VERSION = "v3.91"
 UPDATE_DATE = "2026-02-08"
 
 # === APP 設定 ===
@@ -227,15 +227,17 @@ with col_header_L:
 with col_header_R:
     # 專案存取控制台 (外框)
     with st.container(border=True):
-        st.markdown(f"**專案存取 (Project I/O)**")
+        # [UI Fix v3.91] 左右分欄布局：左邊顯示狀態，右邊顯示載入功能
+        c_p1, c_p2 = st.columns([1, 1])
         
-        # 1. 載入 (Load) - 必須在前面
-        c_io_1, c_io_2 = st.columns([2, 3])
-        with c_io_1:
-             st.caption(f"{config_loaded_msg}")
-        with c_io_2:
+        with c_p1:
+            st.markdown("**專案存取 (Project I/O)**")
+            st.markdown(f"<div style='font-size: 0.85rem; margin-top: 5px; color: #555;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
+            
+        with c_p2:
+            st.markdown("**📂 載入專案設定 (.json)**")
             uploaded_proj = st.file_uploader("📂 載入專案 (.json)", type=["json"], key="project_loader", label_visibility="collapsed")
-        
+            
         if uploaded_proj is not None:
             if uploaded_proj != st.session_state['last_loaded_file']:
                 try:
@@ -903,6 +905,7 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 # --- [Project I/O - Save Logic] 移到底部執行 ---
+# 確保所有輸入參數與計算結果都已更新後，才執行儲存邏輯
 with project_io_save_placeholder.container():
     def get_current_state_json():
         params_to_save = list(DEFAULT_GLOBALS.keys())
