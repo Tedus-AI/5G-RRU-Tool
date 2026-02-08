@@ -9,17 +9,15 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.96 (Transparent Uploader UI)
+# 版本：v3.97 (Final UI Polish)
 # 日期：2026-02-09
 # 修正重點：
-# 1. [CSS] 移除 File Uploader 的灰色背景與邊框：
-#    - 設定 background-color: transparent !important
-#    - 設定 border: none !important
-#    - 視覺上只保留 "Browse files" 按鈕，符合使用者截圖需求。
+# 1. [CSS] 強力去除 File Uploader 灰色背景與邊框，只保留按鈕。
+# 2. [UI] Header 右側佈局重寫：文字在左，按鈕在右，水平並排。
 # ==============================================================================
 
 # 定義版本資訊
-APP_VERSION = "v3.96"
+APP_VERSION = "v3.97"
 UPDATE_DATE = "2026-02-09"
 
 # === APP 設定 ===
@@ -54,7 +52,7 @@ DEFAULT_GLOBALS = {
 # 嘗試載入設定檔
 config_path = "default_config.json"
 config_loaded_msg = "🟡 使用內建預設值" 
-config_status_color = "#f1c40f" # Yellow
+config_status_color = "#f1c40f" 
 
 if os.path.exists(config_path):
     try:
@@ -73,10 +71,10 @@ if os.path.exists(config_path):
                 
             if loaded_globals:
                 config_loaded_msg = "🟢 設定檔載入成功 (default_config.json)"
-                config_status_color = "#2ecc71" # Green
+                config_status_color = "#2ecc71" 
             else:
                 config_loaded_msg = "🔴 預設檔格式異常"
-                config_status_color = "#e74c3c" # Red
+                config_status_color = "#e74c3c"
     except Exception as e:
         config_loaded_msg = f"🔴 讀取錯誤: {str(e)}"
         config_status_color = "#e74c3c"
@@ -175,7 +173,7 @@ if "welcome_shown" not in st.session_state:
 # ==================================================
 # 👇 主程式開始 - Header 區塊
 # ==================================================
-# CSS 樣式 (含 Uploader 瘦身 Hack)
+# CSS 樣式 (極致瘦身版 File Uploader)
 st.markdown("""
 <style>
     html, body, [class*="css"] { font-family: "Microsoft JhengHei", "Roboto", sans-serif; }
@@ -209,21 +207,20 @@ st.markdown("""
     /* Header Container Style */
     [data-testid="stHeader"] { z-index: 0; }
 
-    /* --- [v3.96 CSS] Transparent File Uploader --- */
-    /* 隱藏預設的 "Drag and drop..." 與 "Limit..." */
+    /* --- [v3.97 CSS] 透明化 File Uploader & 隱藏多餘文字 --- */
+    /* 1. 隱藏所有的 helper text (Drag and drop..., Limit 200MB...) */
     [data-testid="stFileUploader"] section > div > div > span, 
     [data-testid="stFileUploader"] section > div > div > small {
-        display: none;
+        display: none !important;
     }
-    /* 縮減容器高度與內距，移除背景色與邊框 */
+    /* 2. 移除上傳區塊的背景色與邊框，讓它看起來像是不存在 */
     [data-testid="stFileUploader"] section {
         padding: 0px !important;
         min-height: 0px !important;
-        margin-top: -5px;
-        background-color: transparent !important; /* 移除灰色背景 */
-        border: none !important; /* 移除邊框 */
+        background-color: transparent !important;
+        border: none !important;
     }
-    /* 按鈕樣式微調 */
+    /* 3. 確保按鈕本身樣式正常 */
     [data-testid="stFileUploader"] button {
         margin-top: 0px;
         border-color: #ddd;
@@ -234,7 +231,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# [UI] 頂部布局：左側標題 / 右側專案存取
+# [UI] 頂部布局
 col_header_L, col_header_R = st.columns([1.8, 1.2])
 
 with col_header_L:
@@ -253,20 +250,24 @@ with col_header_L:
 with col_header_R:
     # 專案存取控制台 (外框)
     with st.container(border=True):
-        # [UI Fix] 左右分欄布局
-        c_p1, c_p2 = st.columns([1.3, 1], gap="small")
+        # 左右兩大欄
+        c_p1, c_p2 = st.columns([1, 1.2], gap="small")
         
-        # 標題樣式 (統一)
+        # 標題樣式統一
         header_style = "font-size: 0.9rem; font-weight: 700; color: #333; margin-bottom: 2px;"
-        
+
         with c_p1:
             st.markdown(f"<div style='{header_style}'>專案存取 (Project I/O)</div>", unsafe_allow_html=True)
-            # 狀態文字微調
-            st.markdown(f"<div style='font-size: 0.8rem; color: #555; margin-top: 2px;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size: 0.8rem; color: #555; margin-top: 5px;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
             
         with c_p2:
-            st.markdown(f"<div style='{header_style} padding-top: 6px; text-align: right;'>📂 載入專案設定 (.json)</div>", unsafe_allow_html=True)
-            uploaded_proj = st.file_uploader("Upload", type=["json"], key="project_loader", label_visibility="collapsed")
+            # [UI Update] 使用巢狀 Columns 讓 文字 與 Uploader 按鈕並排
+            c_text, c_btn = st.columns([1.5, 1])
+            with c_text:
+                st.markdown(f"<div style='{header_style} padding-top: 6px; text-align: right; white-space: nowrap;'>📂 載入專案設定</div>", unsafe_allow_html=True)
+            with c_btn:
+                # 這裡的 Uploader 已經被 CSS 魔改成只有一顆按鈕了
+                uploaded_proj = st.file_uploader(" ", type=["json"], key="project_loader", label_visibility="collapsed")
             
         if uploaded_proj is not None:
             if uploaded_proj != st.session_state['last_loaded_file']:
@@ -289,7 +290,7 @@ with col_header_R:
         
         st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
         
-        # 2. 存檔 (Save) - 使用 Placeholder 佔位 (解決變數名稱問題)
+        # 2. 存檔 (Save) - 使用 Placeholder 佔位
         project_io_save_placeholder = st.empty()
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
@@ -935,7 +936,6 @@ with tab_3d:
         st.success("""1. 開啟 **Gemini** 對話視窗。\n2. 確認模型設定為 **思考型 (Thinking) + Nano Banana (Imagen 3)**。\n3. 依序上傳兩張圖片 (3D 模擬圖 + 寫實參考圖)。\n4. 貼上提示詞並送出。""")
 
 # --- [Project I/O - Save Logic] 移到底部執行 ---
-# 確保所有輸入參數與計算結果都已更新後，才執行儲存邏輯
 # [Critical Fix] 確保 placeholder 名稱與頂部定義一致 (project_io_save_placeholder)
 with project_io_save_placeholder.container():
     def get_current_state_json():
