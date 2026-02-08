@@ -9,12 +9,12 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.86 (Tab Title Update)
+# 版本：v3.87 (Tab Title Emoji Restore)
 # 日期：2026-02-08
 # 修正重點：
-# 1. [UI] 更新 Tab 分頁標題樣式：
-#    - 改為英文為主，中文括號備註的格式 (e.g., "COMPONENT SETUP (元件設定)")。
-#    - 去除 Emoji，提升專業感。
+# 1. [UI] Tab 標題格式優化：
+#    - 保留 Emoji 圖示。
+#    - 格式調整為 "Emoji ENGLISH (中文)" (e.g., "📝 COMPONENT SETUP (元件設定)")。
 # ==============================================================================
 
 # === APP 設定 ===
@@ -372,12 +372,12 @@ with st.sidebar.expander("3. 材料參數 (含 Via K值)", expanded=False):
 # ==================================================
 # 3. 分頁與邏輯
 # ==================================================
-# [UI Fix] 標題格式統一：英文 (中文)
+# [UI Fix] 標題格式統一：Emoji + 英文 (中文)
 tab_input, tab_data, tab_viz, tab_3d = st.tabs([
-    "COMPONENT SETUP (元件設定)", 
-    "DETAILED ANALYSIS (詳細分析)", 
-    "VISUAL REPORT (視覺化報告)", 
-    "3D SIMULATION (3D 模擬視圖)"
+    "📝 COMPONENT SETUP (元件設定)", 
+    "🔢 DETAILED ANALYSIS (詳細分析)", 
+    "📊 VISUAL REPORT (視覺化報告)", 
+    "🧊 3D SIMULATION (3D 模擬視圖)"
 ])
 
 # --- Tab 1: 輸入介面 ---
