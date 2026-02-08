@@ -9,18 +9,21 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.88 (UI Polish & Relocate)
+# 版本：v3.89 (Header UI Redesign)
 # 日期：2026-02-08
 # 狀態：正式發布版 (Production Ready)
 # 
 # [變更摘要]
-# 1. UI: 將「專案存檔」按鈕移至側邊欄頂部的 Expander 內 (使用 Placeholder 技術)。
-# 2. UI: 版本號移至主標題區塊顯示，移除底部 Footer。
-# 3. Core: 保持所有核心計算與防呆邏輯不變。
+# 1. UI: 將「專案存取」區塊移至主畫面頂部 (Header)，採用左右分欄設計。
+#    - 左側：標題與版本資訊。
+#    - 右側：專案存取控制台 (Load/Save)。
+# 2. Logic: 分離 Load 與 Save 的執行時機，確保資料流正確：
+#    - Load: 在渲染元件前執行 (確保 UI 讀到新值)。
+#    - Save: 在渲染元件後執行 (確保打包到新值)，透過 Placeholder 回填至頂部。
 # ==============================================================================
 
 # 定義版本資訊
-APP_VERSION = "v3.88"
+APP_VERSION = "v3.89"
 UPDATE_DATE = "2026-02-08"
 
 # === APP 設定 ===
@@ -69,17 +72,16 @@ if os.path.exists(config_path):
                 loaded_globals = True
             
             if 'components_data' in custom_config:
-                # 這裡僅更新變數，真正的 DataFrame 初始化在下方
                 pass 
                 
             if loaded_globals:
-                config_loaded_msg = "🟢 設定檔載入成功 (default_config.json)"
+                config_loaded_msg = "🟢 預設檔: default_config.json"
             else:
-                config_loaded_msg = "🔴 格式異常 (Key Missing)"
+                config_loaded_msg = "🔴 預設檔格式異常"
     except Exception as e:
         config_loaded_msg = f"🔴 讀取錯誤: {str(e)}"
 else:
-    config_loaded_msg = "🟡 使用內建預設值 (No Config File)"
+    config_loaded_msg = "🟡 無預設檔 (Internal Defaults)"
 
 # 寫入 Session State
 for k, v in DEFAULT_GLOBALS.items():
@@ -170,21 +172,8 @@ if "welcome_shown" not in st.session_state:
     st.session_state["welcome_shown"] = True
 
 # ==================================================
-# 👇 主程式開始
+# 👇 主程式開始 - Header 區塊
 # ==================================================
-
-# 標題
-st.markdown(f"""
-    <h1 style='text-align: center; background: -webkit-linear-gradient(45deg, #007CF0, #00DFD8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;'>
-    📡 5G RRU 體積估算引擎 <span style='font-size: 20px; color: #888; -webkit-text-fill-color: #888;'>Pro</span>
-    </h1>
-    <div style='text-align: center; color: #666; font-size: 14px; margin-bottom: 20px;'>
-        High-Performance Thermal Calculation System 
-        <span style="color: #bbb; margin-left: 10px;">| {APP_VERSION} ({UPDATE_DATE})</span>
-    </div>
-    <hr style="margin-top: 0;">
-    """, unsafe_allow_html=True)
-
 # CSS 樣式
 st.markdown("""
 <style>
@@ -215,68 +204,66 @@ st.markdown("""
     .kpi-title { color: #666; font-size: 0.9rem; font-weight: 500; margin-bottom: 5px; }
     .kpi-value { color: #333; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; }
     .kpi-desc { color: #888; font-size: 0.8rem; }
-
-    /* 表格樣式 */
-    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-        border: 1px solid #e9ecef !important; border-radius: 8px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important;
-    }
-    [data-testid="stDataFrame"] thead tr th { background-color: #f8f9fa !important; color: #495057 !important; }
-
-    /* Scale Bar CSS */
-    .legend-container { display: flex; flex-direction: column; align-items: center; margin-top: 40px; font-size: 0.85rem; }
-    .legend-title { font-weight: bold; margin-bottom: 5px; color: black; }
-    .legend-body { display: flex; align-items: stretch; height: 200px; }
-    .gradient-bar { width: 15px; background: linear-gradient(to top, #d73027, #fee08b, #1a9850); border-radius: 3px; margin-right: 8px; border: 1px solid #ccc; }
-    .legend-labels { display: flex; flex-direction: column; justify-content: space-between; color: black; font-weight: bold; }
+    
+    /* Header Container Style */
+    [data-testid="stHeader"] { z-index: 0; }
 </style>
 """, unsafe_allow_html=True)
 
+# [UI] 頂部布局：左側標題 / 右側專案存取
+col_header_L, col_header_R = st.columns([1.8, 1.2])
+
+with col_header_L:
+    st.markdown(f"""
+        <div style="padding-top: 10px;">
+            <h1 style='margin:0; background: -webkit-linear-gradient(45deg, #007CF0, #00DFD8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-size: 2.5rem;'>
+            📡 5G RRU 體積估算引擎 <span style='font-size: 20px; color: #888; -webkit-text-fill-color: #888;'>Pro</span>
+            </h1>
+            <div style='color: #666; font-size: 14px; margin-top: 5px;'>
+                High-Performance Thermal Calculation System 
+                <span style="color: #bbb; margin-left: 10px;">| {APP_VERSION} ({UPDATE_DATE})</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_header_R:
+    # 專案存取控制台 (外框)
+    with st.container(border=True):
+        c1, c2 = st.columns([1, 1.5])
+        with c1:
+            st.markdown(f"<small>{config_loaded_msg}</small>", unsafe_allow_html=True)
+            # 1. 載入 (必須在最前面執行，才能更新下方 State)
+            uploaded_proj = st.file_uploader("📂 載入專案 (.json)", type=["json"], key="project_loader", label_visibility="collapsed")
+            if uploaded_proj is not None:
+                if uploaded_proj != st.session_state['last_loaded_file']:
+                    try:
+                        data = json.load(uploaded_proj)
+                        if 'global_params' in data:
+                            for k, v in data['global_params'].items():
+                                st.session_state[k] = v
+                        if 'components_data' in data:
+                            new_df = pd.DataFrame(data['components_data'])
+                            st.session_state['df_initial'] = new_df
+                            st.session_state['df_current'] = new_df.copy()
+                            st.session_state['editor_key'] += 1
+                        st.session_state['last_loaded_file'] = uploaded_proj
+                        st.toast("✅ 專案載入成功！", icon="📂")
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        with c2:
+            # 2. 存檔 (預留空位，稍後回填)
+            save_header_placeholder = st.empty()
+
+st.markdown("<hr style='margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+
+
 # ==================================================
-# 1. 側邊欄
+# 1. 側邊欄 (參數設定)
 # ==================================================
 st.sidebar.header("🛠️ 參數控制台")
-
-# --- [Project I/O] ---
-with st.sidebar.expander("📁 專案存取 (Project I/O)", expanded=False):
-    # [UI] 預設設定檔狀態 (精簡版)
-    st.markdown(f"""
-    <div style='margin-bottom: 10px; font-size: 0.9rem;'>
-        <b>預設檔案載入</b><br>
-        <span style='font-size: 0.85rem;'>{config_loaded_msg}</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 1. 載入
-    uploaded_proj = st.file_uploader("📂 載入專案設定 (.json)", type=["json"], key="project_loader")
-    
-    if uploaded_proj is not None:
-        if uploaded_proj != st.session_state['last_loaded_file']:
-            try:
-                data = json.load(uploaded_proj)
-                # 還原全域
-                if 'global_params' in data:
-                    for k, v in data['global_params'].items():
-                        st.session_state[k] = v
-                
-                # 還原表格
-                if 'components_data' in data:
-                    new_df = pd.DataFrame(data['components_data'])
-                    st.session_state['df_initial'] = new_df
-                    st.session_state['df_current'] = new_df.copy()
-                    st.session_state['editor_key'] += 1
-                
-                st.session_state['last_loaded_file'] = uploaded_proj
-                st.toast("✅ 專案載入成功！", icon="📂")
-                time.sleep(0.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ 檔案讀取失敗: {e}")
-
-    st.markdown("---")
-    
-    # [修正] 預留按鈕區空位 (為了將按鈕顯示在上方，但邏輯在下方執行)
-    save_ui_placeholder = st.empty()
 
 # --- 參數設定區 (綁定 on_change=reset_download_state + 讀取 value) ---
 with st.sidebar.expander("1. 環境與係數", expanded=True):
@@ -398,7 +385,6 @@ with tab_input:
             "Pad_W": st.column_config.NumberColumn("Pad 寬 (mm)", help="元件底部散熱焊盤 (E-pad) 的寬度", format="%.2f"),
             "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.2f"),
             "Board_Type": st.column_config.SelectboxColumn("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)", options=["Thermal Via", "Copper Coin", "None"], width="medium"),
-            # [修正] 移除 Solder 選項
             "TIM_Type": st.column_config.SelectboxColumn("介面材料", help="元件或銅塊底部與散熱器之間的TIM", options=["Grease", "Pad", "Putty", "None"], width="medium"),
             "R_jc": st.column_config.NumberColumn("熱阻 Rjc", help="結點到殼的內部熱阻", format="%.2f"),
             "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.2f")
@@ -413,10 +399,9 @@ with tab_input:
     st.session_state['df_current'] = edited_df
 
 # ==================================================
-# # 核心計算函數 (Refactored for Maintainability)
+# # 核心計算函數
 # ==================================================
 def calc_h_value(Gap):
-    """計算 h_conv, h_rad, h_value"""
     h_conv = 6.4 * np.tanh(Gap / 7.0)
     if Gap >= 10.0:
         rad_factor = 1.0
@@ -427,7 +412,6 @@ def calc_h_value(Gap):
     return h_value, h_conv, h_rad
 
 def calc_fin_count(W_hsk, Gap, Fin_t):
-    """植樹原理計算最大鰭片數"""
     if Gap + Fin_t > 0:
         num_fins_float = (W_hsk + Gap) / (Gap + Fin_t)
         num_fins_int = int(num_fins_float)
@@ -441,8 +425,6 @@ def calc_fin_count(W_hsk, Gap, Fin_t):
     return num_fins_int
 
 def calc_thermal_resistance(row, g):
-    """單行元件熱阻計算 (取代原本 apply_excel_formulas)"""
-    # 從 g (globals_dict) 取出需要的全域變數
     if row['Component'] == "Final PA":
         base_l, base_w = g['Coin_L_Setting'], g['Coin_W_Setting']
     elif row['Power(W)'] == 0 or row['Thick(mm)'] == 0:
@@ -486,7 +468,7 @@ def calc_thermal_resistance(row, g):
     allowed_dt = row['Limit(C)'] - drop - loc_amb
     return pd.Series([base_l, base_w, loc_amb, r_int, r_tim, total_w, drop, allowed_dt])
 
-# --- 後台運算 (Refactored) ---
+# --- 後台運算 ---
 globals_dict = {
     'T_amb': T_amb, 'Slope': Slope,
     'Coin_L_Setting': Coin_L_Setting, 'Coin_W_Setting': Coin_W_Setting,
@@ -502,7 +484,6 @@ tim_props = {
 }
 globals_dict['tim_props'] = tim_props
 
-# 元件熱阻計算
 if not edited_df.empty:
     calc_results = edited_df.apply(lambda row: calc_thermal_resistance(row, globals_dict), axis=1)
     calc_results.columns = ['Base_L', 'Base_W', 'Loc_Amb', 'R_int', 'R_TIM', 'Total_W', 'Drop', 'Allowed_dT']
@@ -510,7 +491,6 @@ if not edited_df.empty:
 else:
     final_df = pd.DataFrame()
 
-# 總功耗與瓶頸
 valid_rows = final_df[final_df['Total_W'] > 0].copy()
 if not valid_rows.empty:
     Total_Watts_Sum = valid_rows['Total_W'].sum()
@@ -520,8 +500,6 @@ else:
     Total_Watts_Sum = 0; Min_dT_Allowed = 50; Bottleneck_Name = "None"
 
 L_hsk, W_hsk = L_pcb + Top + Btm, W_pcb + Left + Right
-
-# 核心計算呼叫
 h_value, h_conv, h_rad = calc_h_value(Gap)
 num_fins_int = calc_fin_count(W_hsk, Gap, Fin_t)
 Fin_Count = num_fins_int
@@ -538,33 +516,27 @@ if Total_Power > 0 and Min_dT_Allowed > 0:
     RRU_Height = t_base + Fin_Height + H_shield + H_filter
     Volume_L = (L_hsk * W_hsk * RRU_Height) / 1e6
     
-    # [v3.84] 重量計算
+    # 重量計算
     base_vol_cm3 = L_hsk * W_hsk * t_base / 1000
     fins_vol_cm3 = num_fins_int * Fin_t * Fin_Height * L_hsk / 1000
     hs_weight_kg = (base_vol_cm3 + fins_vol_cm3) * al_density / 1000
-    
     shield_outer_vol_cm3 = L_hsk * W_hsk * H_shield / 1000
     shield_inner_vol_cm3 = L_pcb * W_pcb * H_shield / 1000
     shield_vol_cm3 = max(shield_outer_vol_cm3 - shield_inner_vol_cm3, 0)
     shield_weight_kg = shield_vol_cm3 * al_density / 1000
-    
     filter_vol_cm3 = L_hsk * W_hsk * H_filter / 1000
     filter_weight_kg = filter_vol_cm3 * filter_density / 1000
-    
     shielding_height_cm = 1.2
     shielding_area_cm2 = L_pcb * W_pcb / 100
     shielding_vol_cm3 = shielding_area_cm2 * shielding_height_cm
     shielding_weight_kg = shielding_vol_cm3 * shielding_density / 1000
-    
     pcb_area_cm2 = L_pcb * W_pcb / 100
     pcb_weight_kg = pcb_area_cm2 * pcb_surface_density / 1000
-    
     cavity_weight_kg = filter_weight_kg + shield_weight_kg + shielding_weight_kg + pcb_weight_kg
     total_weight_kg = hs_weight_kg + cavity_weight_kg
 
 else:
     R_sa = 0; Area_req = 0; Fin_Height = 0; RRU_Height = 0; Volume_L = 0
-    # [Fix NameError] 必須初始化重量變數
     total_weight_kg = 0; hs_weight_kg = 0; shield_weight_kg = 0
     filter_weight_kg = 0; shielding_weight_kg = 0; pcb_weight_kg = 0
 
@@ -573,20 +545,17 @@ else:
 # ==================================================
 drc_failed = False
 drc_msg = ""
-
-# 計算流阻比 (Aspect Ratio)
 if Gap > 0 and Fin_Height > 0:
     aspect_ratio = Fin_Height / Gap
 else:
     aspect_ratio = 0
 
-# [UI] 更新側邊欄的 Aspect Ratio 資訊 (回填)
-# 修正建議值為 4.5 ~ 6.5
+# [UI] 回填 Aspect Ratio
 if aspect_ratio > 12.0:
-    ar_color = "#e74c3c" # Red
+    ar_color = "#e74c3c"
     ar_msg = "過高 (High)"
 else:
-    ar_color = "#00b894" # Green
+    ar_color = "#00b894"
     ar_msg = "良好 (Good)"
 
 if Fin_Height > 0:
@@ -615,7 +584,7 @@ elif "Embedded" in fin_tech and Fin_Height > 100.0:
     drc_failed = True
     drc_msg = f"⛔ **製程限制 (Process Limit)：** Embedded Fin (埋入式鰭片) 製程高度限制需 < 100mm (目前計算值: {Fin_Height:.1f}mm)。\n此高度已超過製程極限，建議增加設備的X/Y方向面積來讓Z方向面積增加。"
 
-# --- Tab 2: 詳細數據 (表二) ---
+# --- Tab 2: 詳細數據 ---
 with tab_data:
     st.subheader("🔢 DETAILED ANALYSIS (詳細分析)")
     st.caption("💡 **提示：將滑鼠游標停留在表格的「欄位標題」上，即可查看詳細的名詞解釋與定義。**")
@@ -626,11 +595,8 @@ with tab_data:
         mid_val = (min_val + max_val) / 2
         
         styled_df = final_df.style.background_gradient(
-            subset=['Allowed_dT'], 
-            cmap='RdYlGn'
-        ).format({
-            "R_int": "{:.4f}", "R_TIM": "{:.4f}", "Allowed_dT": "{:.2f}"
-        })
+            subset=['Allowed_dT'], cmap='RdYlGn'
+        ).format({"R_int": "{:.4f}", "R_TIM": "{:.4f}", "Allowed_dT": "{:.2f}"})
         
         st.dataframe(
             styled_df, 
@@ -644,8 +610,6 @@ with tab_data:
                 "Thick(mm)": st.column_config.NumberColumn("板厚 (mm)", help="熱需傳導穿過的 PCB 或銅塊 (Coin) 厚度", format="%.1f"),
                 "R_jc": st.column_config.NumberColumn("Rjc", help="結點到殼的內部熱阻", format="%.2f"),
                 "Limit(C)": st.column_config.NumberColumn("限溫 (°C)", help="元件允許最高運作溫度", format="%.1f"),
-                
-                # 計算欄位 - 完整公式說明
                 "Base_L": st.column_config.NumberColumn("Base 長 (mm)", help="熱量擴散後的底部有效長度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
                 "Base_W": st.column_config.NumberColumn("Base 寬 (mm)", help="熱量擴散後的底部有效寬度。Final PA 為銅塊設定值；一般元件為 Pad + 板厚。", format="%.1f"),
                 "Loc_Amb": st.column_config.NumberColumn("局部環溫 (°C)", help="該元件高度處的環境溫度。公式：全域環溫 + (元件高度 × 0.03)。", format="%.1f"),
@@ -654,16 +618,12 @@ with tab_data:
                 "Allowed_dT": st.column_config.NumberColumn("允許溫升 (°C)", help="散熱器剩餘可用的溫升裕度。數值越小代表該元件越容易過熱 (瓶頸)。公式：Limit - Loc_Amb - Drop。", format="%.2f"),
                 "R_int": st.column_config.NumberColumn("基板熱阻 (°C/W)", help="元件穿過 PCB (Via) 或銅塊 (Coin) 傳導至底部的熱阻值。", format="%.4f"),
                 "R_TIM": st.column_config.NumberColumn("介面熱阻 (°C/W)", help="元件或銅塊底部與散熱器之間的接觸熱阻 (由 TIM 材料與面積決定)。", format="%.4f"),
-                
-                # 名詞一致化
                 "Board_Type": st.column_config.Column("元件導熱方式", help="元件導熱到HSK表面的方式(thermal via或銅塊)"),
                 "TIM_Type": st.column_config.Column("介面材料", help="元件或銅塊底部與散熱器之間的TIM")
             },
-            use_container_width=True, 
-            hide_index=True
+            use_container_width=True, hide_index=True
         )
         
-        # [UI Update] 將 Scale Bar 移至下方，並改為橫式
         st.markdown(f"""
         <div style="display: flex; flex-direction: column; align-items: center; margin: 15px 0;">
             <div style="font-weight: bold; margin-bottom: 5px; color: #555; font-size: 0.9rem;">允許溫升 (Allowed dT) 色階參考</div>
@@ -675,178 +635,88 @@ with tab_data:
             </div>
         </div>
         """, unsafe_allow_html=True)
-        
-        st.info("""
-        ℹ️ **名詞解釋 - 允許溫升 (Allowed dT)** 此數值代表 **「散熱器可用的溫升裕度」** (Limit - Local Ambient - Drop)。
-        * 🟩 **綠色 (數值高)**：代表散熱裕度充足，該元件不易過熱。
-        * 🟥 **紅色 (數值低)**：代表散熱裕度極低，該元件是系統的熱瓶頸。
-        """)
+        st.info("""ℹ️ **名詞解釋 - 允許溫升 (Allowed dT)** 此數值代表 **「散熱器可用的溫升裕度」**...""")
 
 # --- Tab 3: 視覺化報告 ---
 with tab_viz:
     st.subheader("📊 VISUAL REPORT (視覺化報告)")
-    
     def card(col, title, value, desc, color="#333"):
-        col.markdown(f"""
-        <div class="kpi-card" style="border-left: 5px solid {color};">
-            <div class="kpi-title">{title}</div>
-            <div class="kpi-value">{value}</div>
-            <div class="kpi-desc">{desc}</div>
-        </div>""", unsafe_allow_html=True)
+        col.markdown(f"""<div class="kpi-card" style="border-left: 5px solid {color};"><div class="kpi-title">{title}</div><div class="kpi-value">{value}</div><div class="kpi-desc">{desc}</div></div>""", unsafe_allow_html=True)
 
     k1, k2, k3, k4 = st.columns(4)
-    # Total Power: Red (#e74c3c)
     card(k1, "整機總熱耗", f"{round(Total_Power, 2)} W", "Total Power", "#e74c3c")
-    # Bottleneck: Orange (#f39c12)
     card(k2, "系統瓶頸元件", f"{Bottleneck_Name}", f"dT: {round(Min_dT_Allowed, 2)}°C", "#f39c12")
-    # Area: Blue (#3498db)
     card(k3, "所需散熱面積", f"{round(Area_req, 3)} m²", "Required Area", "#3498db")
-    # Fin Count: Purple (#9b59b6)
     card(k4, "預估鰭片數量", f"{int(Fin_Count)} Pcs", "Fin Count", "#9b59b6")
-
     st.markdown("<br>", unsafe_allow_html=True)
 
     if not valid_rows.empty:
         c1, c2 = st.columns(2)
         with c1:
-            # 圓餅圖
-            fig_pie = px.pie(valid_rows, values='Total_W', names='Component', 
-                             title='<b>各元件功耗佔比 (Power Breakdown)</b>', 
-                             hole=0.5,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-            
-            fig_pie.update_traces(
-                textposition='outside', 
-                textinfo='label+percent',
-                marker=dict(line=dict(color='#ffffff', width=2))
-            )
-            
-            fig_pie.update_layout(
-                showlegend=False, 
-                margin=dict(t=90, b=150, l=100, r=100),
-                title=dict(pad=dict(b=20)),
-                annotations=[
-                    dict(
-                        text=f"<b>{round(Total_Power, 2)} W</b><br><span style='font-size:14px; color:#888'>Total</span>", 
-                        x=0.5, y=0.5, 
-                        font_size=24, 
-                        showarrow=False
-                    )
-                ]
-            )
+            fig_pie = px.pie(valid_rows, values='Total_W', names='Component', title='<b>各元件功耗佔比 (Power Breakdown)</b>', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_pie.update_traces(textposition='outside', textinfo='label+percent', marker=dict(line=dict(color='#ffffff', width=2)))
+            fig_pie.update_layout(showlegend=False, margin=dict(t=90, b=150, l=100, r=100), title=dict(pad=dict(b=20)), annotations=[dict(text=f"<b>{round(Total_Power, 2)} W</b><br><span style='font-size:14px; color:#888'>Total</span>", x=0.5, y=0.5, font_size=24, showarrow=False)])
             st.plotly_chart(fig_pie, use_container_width=True)
-            
         with c2:
-            valid_rows_sorted = valid_rows.sort_values(by="Allowed_dT", ascending=True)
-            fig_bar = px.bar(
-                valid_rows_sorted, x='Component', y='Allowed_dT', 
-                title='<b>各元件剩餘溫升裕度 (Thermal Budget)</b>',
-                color='Allowed_dT', 
-                color_continuous_scale='RdYlGn',
-                labels={'Allowed_dT': '允許溫升 (°C)'}
-            )
+            fig_bar = px.bar(valid_rows.sort_values(by="Allowed_dT"), x='Component', y='Allowed_dT', title='<b>各元件剩餘溫升裕度 (Thermal Budget)</b>', color='Allowed_dT', color_continuous_scale='RdYlGn', labels={'Allowed_dT': '允許溫升 (°C)'})
             fig_bar.update_layout(xaxis_title="元件名稱", yaxis_title="散熱器允許溫升 (°C)")
             st.plotly_chart(fig_bar, use_container_width=True)
 
     st.markdown("---")
     st.subheader("📏 尺寸與體積估算")
     c5, c6 = st.columns(2)
-    
     if drc_failed:
         st.error(drc_msg)
-        st.markdown(f"""
-        <div style="display:flex; gap:20px;">
-            <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
-                建議鰭片高度<br>N/A
-            </div>
-            <div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">
-                RRU 整機尺寸<br>Calculation Failed
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div style="display:flex; gap:20px;"><div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">建議鰭片高度<br>N/A</div><div style="flex:1; background:#eee; padding:20px; border-radius:10px; text-align:center; color:#999;">RRU 整機尺寸<br>Calculation Failed</div></div>""", unsafe_allow_html=True)
         vol_bg = "#ffebee"; vol_border = "#e74c3c"; vol_title = "#c0392b"; vol_text = "N/A"
     else:
         card(c5, "建議鰭片高度", f"{round(Fin_Height, 2)} mm", "Suggested Fin Height", "#2ecc71")
         card(c6, "RRU 整機尺寸 (LxWxH)", f"{L_hsk} x {W_hsk} x {round(RRU_Height, 1)}", "Estimated Dimensions", "#34495e")
         vol_bg = "#e6fffa"; vol_border = "#00b894"; vol_title = "#006266"; vol_text = f"{round(Volume_L, 2)} L"
 
-    st.markdown(f"""
-    <div style="background-color: {vol_bg}; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid {vol_border}; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
-        <h3 style="color: {vol_title}; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3>
-        <h1 style="color: {vol_border}; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{vol_text}</h1>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div style="background-color: {vol_bg}; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid {vol_border}; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;"><h3 style="color: {vol_title}; margin:0; font-size: 1.4rem; letter-spacing: 1px;">★ RRU 整機估算體積 (Estimated Volume)</h3><h1 style="color: {vol_border}; margin:15px 0 0 0; font-size: 4.5rem; font-weight: 800;">{vol_text}</h1></div>""", unsafe_allow_html=True)
 
-    # [v3.84/85 Fix] 重量顯示區塊 (僅在 DRC 通過時顯示，並確保變數安全)
     if not drc_failed:
-        st.markdown(f"""
-        <div style="background-color: #ecf0f1; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;">
-            <h3 style="color: #2c3e50; margin:0; font-size: 1.4rem; letter-spacing: 1px;">⚖️ 整機估算重量 (Estimated Weight)</h3>
-            <h1 style="color: #34495e; margin:15px 0 10px 0; font-size: 3.5rem; font-weight: 800;">{round(total_weight_kg, 1)} kg</h1>
-            <small style="color: #7f8c8d; line-height: 1.6;">
-                Heatsink ≈ {round(hs_weight_kg, 1)} kg | Shield ≈ {round(shield_weight_kg, 1)} kg<br>
-                Filter ≈ {round(filter_weight_kg, 1)} kg | Shielding Case ≈ {round(shielding_weight_kg, 1)} kg | PCB ≈ {round(pcb_weight_kg, 2)} kg
-            </small>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div style="background-color: #ecf0f1; padding: 30px; margin-top: 20px; border-radius: 15px; border-left: 10px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;"><h3 style="color: #2c3e50; margin:0; font-size: 1.4rem; letter-spacing: 1px;">⚖️ 整機估算重量 (Estimated Weight)</h3><h1 style="color: #34495e; margin:15px 0 10px 0; font-size: 3.5rem; font-weight: 800;">{round(total_weight_kg, 1)} kg</h1><small style="color: #7f8c8d; line-height: 1.6;">Heatsink ≈ {round(hs_weight_kg, 1)} kg | Shield ≈ {round(shield_weight_kg, 1)} kg<br>Filter ≈ {round(filter_weight_kg, 1)} kg | Shielding Case ≈ {round(shielding_weight_kg, 1)} kg | PCB ≈ {round(pcb_weight_kg, 2)} kg</small></div>""", unsafe_allow_html=True)
 
 # --- Tab 4: 3D 模擬視圖 ---
 with tab_3d:
     st.subheader("🧊 3D SIMULATION (3D 模擬視圖)")
-    st.caption("模型展示：底部電子艙 + 頂部散熱鰭片、鰭片數量與間距皆為真實比例。模擬圖右上角有小功能可使用。")
-    
-    # [修正] 3D 圖也受 DRC 控制
+    st.caption("模型展示：底部電子艙 + 頂部散熱鰭片...")
     if not drc_failed and L_hsk > 0 and W_hsk > 0 and RRU_Height > 0 and Fin_Height > 0:
         fig_3d = go.Figure()
         COLOR_FINS = '#E5E7E9'; COLOR_BODY = COLOR_FINS
         LIGHTING_METAL = dict(ambient=0.5, diffuse=0.8, specular=0.5, roughness=0.1)
         LIGHTING_MATTE = dict(ambient=0.6, diffuse=0.8, specular=0.1, roughness=0.8)
-
-        # 1. Body
+        # Body
         h_body = H_shield + H_filter
-        fig_3d.add_trace(go.Mesh3d(
-            x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0], y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk], z=[0, 0, 0, 0, h_body, h_body, h_body, h_body],
-            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=COLOR_BODY, lighting=LIGHTING_MATTE, flatshading=True, name='Electronics Body'))
-        
-        # 2. Base
+        fig_3d.add_trace(go.Mesh3d(x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0], y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk], z=[0, 0, 0, 0, h_body, h_body, h_body, h_body], i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6], color=COLOR_BODY, lighting=LIGHTING_MATTE, flatshading=True, name='Electronics Body'))
+        # Base
         z_base_start = h_body; z_base_end = h_body + t_base
-        fig_3d.add_trace(go.Mesh3d(
-            x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0], y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk], z=[z_base_start, z_base_start, z_base_start, z_base_start, z_base_end, z_base_end, z_base_end, z_base_end],
-            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=COLOR_FINS, lighting=LIGHTING_METAL, flatshading=True, name='Heatsink Base'))
-        
-        # 3. Fins
+        fig_3d.add_trace(go.Mesh3d(x=[0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0], y=[0, 0, W_hsk, W_hsk, 0, 0, W_hsk, W_hsk], z=[z_base_start, z_base_start, z_base_start, z_base_start, z_base_end, z_base_end, z_base_end, z_base_end], i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6], color=COLOR_FINS, lighting=LIGHTING_METAL, flatshading=True, name='Heatsink Base'))
+        # Fins
         fin_x, fin_y, fin_z, fin_i, fin_j, fin_k = [], [], [], [], [], []
-        z_fin_start, z_fin_end = z_base_end, z_base_end + Fin_Height
         if num_fins_int > 0:
             total_fin_array_width = (num_fins_int * Fin_t) + ((num_fins_int - 1) * Gap)
             y_offset = (W_hsk - total_fin_array_width) / 2
         else: y_offset = 0
-            
         base_i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]; base_j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]; base_k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
-        
         for idx in range(num_fins_int):
             y_start = y_offset + idx * (Fin_t + Gap); y_end = y_start + Fin_t
             if y_end > W_hsk: break
             current_x = [0, L_hsk, L_hsk, 0, 0, L_hsk, L_hsk, 0]; current_y = [y_start, y_start, y_end, y_end, y_start, y_start, y_end, y_end]
-            current_z = [z_fin_start, z_fin_start, z_fin_start, z_fin_start, z_fin_end, z_fin_end, z_fin_end, z_fin_end]
+            current_z = [z_base_end, z_base_end, z_base_end, z_base_end, z_base_end + Fin_Height, z_base_end + Fin_Height, z_base_end + Fin_Height, z_base_end + Fin_Height]
             offset = len(fin_x)
             fin_x.extend(current_x); fin_y.extend(current_y); fin_z.extend(current_z)
             fin_i.extend([x + offset for x in base_i]); fin_j.extend([x + offset for x in base_j]); fin_k.extend([x + offset for x in base_k])
-
         fig_3d.add_trace(go.Mesh3d(x=fin_x, y=fin_y, z=fin_z, i=fin_i, j=fin_j, k=fin_k, color=COLOR_FINS, lighting=LIGHTING_METAL, flatshading=True, name='Fins'))
-        
-        # 4. Wireframe
+        # Wireframe
         x_lines = [0, L_hsk, L_hsk, 0, 0, None, 0, L_hsk, L_hsk, 0, 0, None, 0, 0, None, L_hsk, L_hsk, None, L_hsk, L_hsk, None, 0, 0]
         y_lines = [0, 0, W_hsk, W_hsk, 0, None, 0, 0, W_hsk, W_hsk, 0, None, 0, 0, None, 0, 0, None, W_hsk, W_hsk, None, W_hsk, W_hsk]
         z_lines = [0, 0, 0, 0, 0, None, RRU_Height, RRU_Height, RRU_Height, RRU_Height, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height, None, 0, RRU_Height]
         fig_3d.add_trace(go.Scatter3d(x=x_lines, y=y_lines, z=z_lines, mode='lines', line=dict(color='black', width=2), showlegend=False))
-        
         max_dim = max(L_hsk, W_hsk, RRU_Height) * 1.1
-        fig_3d.update_layout(
-            scene=dict(xaxis=dict(title='Length', range=[0, max_dim], dtick=50), yaxis=dict(title='Width', range=[0, max_dim], dtick=50), zaxis=dict(title='Height', range=[0, max_dim], dtick=50), aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), camera=dict(projection=dict(type="orthographic"), eye=dict(x=1.2, y=1.2, z=1.2)), bgcolor='white'),
-            margin=dict(l=0, r=0, b=0, t=0), height=600)
+        fig_3d.update_layout(scene=dict(xaxis=dict(title='Length', range=[0, max_dim], dtick=50), yaxis=dict(title='Width', range=[0, max_dim], dtick=50), zaxis=dict(title='Height', range=[0, max_dim], dtick=50), aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), camera=dict(projection=dict(type="orthographic"), eye=dict(x=1.2, y=1.2, z=1.2)), bgcolor='white'), margin=dict(l=0, r=0, b=0, t=0), height=600)
         st.plotly_chart(fig_3d, use_container_width=True)
         c1, c2 = st.columns(2)
         c1.info(f"📐 **外觀尺寸：** 長 {L_hsk:.1f} x 寬 {W_hsk:.1f} x 高 {RRU_Height:.1f} mm")
@@ -935,16 +805,20 @@ with save_ui_placeholder.container():
         st.session_state['trigger_generation'] = False 
         st.rerun() 
 
-    if st.button("🔄 1. 更新並產生專案檔 (Generate)"):
-        st.session_state['trigger_generation'] = True
-        st.rerun()
-
-    if st.session_state.get('json_ready_to_download'):
-        st.download_button(
-            label="💾 2. 下載專案設定 (.json)",
-            data=st.session_state['json_ready_to_download'],
-            file_name=st.session_state['json_file_name'],
-            mime="application/json"
-        )
-    else:
-        st.caption("ℹ️ 請先點擊上方按鈕以產生最新檔案")
+    # [UI Update] 在這裡使用 columns 排版按鈕
+    # 注意：這裡是在 sidebar 的 container 裡
+    c_btn1, c_btn2 = st.columns(2)
+    with c_btn1:
+        if st.button("🔄 1. 更新並產生"):
+            st.session_state['trigger_generation'] = True
+            st.rerun()
+    with c_btn2:
+        if st.session_state.get('json_ready_to_download'):
+            st.download_button(
+                label="💾 2. 下載專案",
+                data=st.session_state['json_ready_to_download'],
+                file_name=st.session_state['json_file_name'],
+                mime="application/json"
+            )
+        else:
+            st.caption("ℹ️ 待更新")
