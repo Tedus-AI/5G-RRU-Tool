@@ -9,18 +9,19 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.91 (Header Layout Refinement)
+# 版本：v3.92 (Compact Uploader UI)
 # 日期：2026-02-08
 # 修正重點：
-# 1. [UI] Header 右側控制台排版優化：
-#    - 採用左右分欄 (Columns) 設計，符合使用者提供的 UI 截圖。
-#    - 左側：顯示 "專案存取" 標題與狀態燈號。
-#    - 右側：顯示 "載入專案設定" 標題與上傳按鈕。
-#    - 確保左右標題字體樣式一致。
+# 1. [UI] 檔案上傳區塊 (File Uploader) 極致瘦身：
+#    - 透過 CSS 隱藏 "Drag and drop" 與 "Limit" 文字。
+#    - 縮減 Padding 與 Min-Height，使其高度僅約一行字。
+#    - 保留雲朵圖示與 Browse 按鈕。
+# 2. [UI] 標題樣式統一：
+#    - 左右兩欄標題 ("專案存取", "載入專案") 使用相同的 HTML/CSS 定義，確保視覺一致。
 # ==============================================================================
 
 # 定義版本資訊
-APP_VERSION = "v3.91"
+APP_VERSION = "v3.92"
 UPDATE_DATE = "2026-02-08"
 
 # === APP 設定 ===
@@ -69,7 +70,6 @@ if os.path.exists(config_path):
                 loaded_globals = True
             
             if 'components_data' in custom_config:
-                # 這裡僅更新變數，真正的 DataFrame 初始化在下方
                 pass 
                 
             if loaded_globals:
@@ -172,7 +172,7 @@ if "welcome_shown" not in st.session_state:
 # ==================================================
 # 👇 主程式開始 - Header 區塊
 # ==================================================
-# CSS 樣式
+# CSS 樣式 (含 Uploader 瘦身 Hack)
 st.markdown("""
 <style>
     html, body, [class*="css"] { font-family: "Microsoft JhengHei", "Roboto", sans-serif; }
@@ -205,6 +205,24 @@ st.markdown("""
     
     /* Header Container Style */
     [data-testid="stHeader"] { z-index: 0; }
+
+    /* --- [v3.92 New] Compact File Uploader CSS Hack --- */
+    /* 隱藏預設的 "Drag and drop..." 與 "Limit..." 文字 */
+    [data-testid="stFileUploader"] section > div > div > span, 
+    [data-testid="stFileUploader"] section > div > div > small {
+        display: none;
+    }
+    /* 縮減容器的高度與內距 */
+    [data-testid="stFileUploader"] section {
+        padding: 0px !important;
+        min-height: 0px !important;
+    }
+    /* 調整按鈕與圖示的排列，使其緊湊 */
+    [data-testid="stFileUploader"] {
+        margin-bottom: 0px;
+    }
+    /* -------------------------------------------------- */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -227,16 +245,20 @@ with col_header_L:
 with col_header_R:
     # 專案存取控制台 (外框)
     with st.container(border=True):
-        # [UI Fix v3.91] 左右分欄布局：左邊顯示狀態，右邊顯示載入功能
-        c_p1, c_p2 = st.columns([1, 1])
+        # [UI Fix v3.91/v3.92] 左右分欄布局
+        c_p1, c_p2 = st.columns([1, 1], gap="small")
+        
+        # 定義統一的標題樣式 (確保字體一致)
+        header_style = "font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; color: #31333F;"
         
         with c_p1:
-            st.markdown("**專案存取 (Project I/O)**")
-            st.markdown(f"<div style='font-size: 0.85rem; margin-top: 5px; color: #555;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='{header_style}'>專案存取 (Project I/O)</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size: 0.8rem; margin-top: 5px; color: #555;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
             
         with c_p2:
-            st.markdown("**📂 載入專案設定 (.json)**")
-            uploaded_proj = st.file_uploader("📂 載入專案 (.json)", type=["json"], key="project_loader", label_visibility="collapsed")
+            st.markdown(f"<div style='{header_style}'>📂 載入專案設定 (.json)</div>", unsafe_allow_html=True)
+            # Uploader (CSS 已將其極致瘦身)
+            uploaded_proj = st.file_uploader("Upload", type=["json"], key="project_loader", label_visibility="collapsed")
             
         if uploaded_proj is not None:
             if uploaded_proj != st.session_state['last_loaded_file']:
@@ -257,7 +279,7 @@ with col_header_R:
                 except Exception as e:
                     st.error(f"Error: {e}")
         
-        st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
         
         # 2. 存檔 (Save) - 使用 Placeholder 佔位
         project_io_save_placeholder = st.empty()
@@ -930,16 +952,16 @@ with project_io_save_placeholder.container():
         st.session_state['trigger_generation'] = False 
         st.rerun() 
 
-    # 左右並排按鈕
+    # [UI Fix] 左右並排按鈕 (使用 columns)
     c_btn1, c_btn2 = st.columns(2)
     with c_btn1:
-        if st.button("🔄 1. 更新並產生專案檔 (Generate)"):
+        if st.button("🔄 1. 更新並產生"):
             st.session_state['trigger_generation'] = True
             st.rerun()
     with c_btn2:
         if st.session_state.get('json_ready_to_download'):
             st.download_button(
-                label="💾 2. 下載專案設定 (.json)",
+                label="💾 2. 下載專案",
                 data=st.session_state['json_ready_to_download'],
                 file_name=st.session_state['json_file_name'],
                 mime="application/json"
