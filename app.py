@@ -9,17 +9,17 @@ import os
 import json
 
 # ==============================================================================
-# 版本：v3.95 (Header Pixel-Perfect Fix)
+# 版本：v3.96 (Transparent Uploader UI)
 # 日期：2026-02-09
 # 修正重點：
-# 1. [UI] Header 右側控制台重新佈局 (依照 image_d1681f.png)：
-#    - 載入區域改為「左文字、右按鈕」的橫向排列。
-#    - 使用 Nested Columns 與 CSS Padding 確保文字與按鈕垂直置中對齊。
-# 2. [Stable] 確保 Placeholder 變數名稱一致，防止按鈕消失。
+# 1. [CSS] 移除 File Uploader 的灰色背景與邊框：
+#    - 設定 background-color: transparent !important
+#    - 設定 border: none !important
+#    - 視覺上只保留 "Browse files" 按鈕，符合使用者截圖需求。
 # ==============================================================================
 
 # 定義版本資訊
-APP_VERSION = "v3.95"
+APP_VERSION = "v3.96"
 UPDATE_DATE = "2026-02-09"
 
 # === APP 設定 ===
@@ -209,30 +209,32 @@ st.markdown("""
     /* Header Container Style */
     [data-testid="stHeader"] { z-index: 0; }
 
-    /* --- [v3.95 CSS] Compact File Uploader --- */
+    /* --- [v3.96 CSS] Transparent File Uploader --- */
     /* 隱藏預設的 "Drag and drop..." 與 "Limit..." */
     [data-testid="stFileUploader"] section > div > div > span, 
     [data-testid="stFileUploader"] section > div > div > small {
         display: none;
     }
-    /* 縮減容器高度與內距 */
+    /* 縮減容器高度與內距，移除背景色與邊框 */
     [data-testid="stFileUploader"] section {
         padding: 0px !important;
         min-height: 0px !important;
         margin-top: -5px;
+        background-color: transparent !important; /* 移除灰色背景 */
+        border: none !important; /* 移除邊框 */
     }
     /* 按鈕樣式微調 */
     [data-testid="stFileUploader"] button {
         margin-top: 0px;
         border-color: #ddd;
-        padding: 0.2rem 0.5rem; /* 更緊湊的按鈕 */
+        padding: 0.2rem 0.5rem;
     }
     /* -------------------------------------------------- */
 
 </style>
 """, unsafe_allow_html=True)
 
-# [UI] 頂部布局
+# [UI] 頂部布局：左側標題 / 右側專案存取
 col_header_L, col_header_R = st.columns([1.8, 1.2])
 
 with col_header_L:
@@ -251,25 +253,20 @@ with col_header_L:
 with col_header_R:
     # 專案存取控制台 (外框)
     with st.container(border=True):
-        # 左右兩大欄
-        c_main_L, c_main_R = st.columns([1.2, 1.5], gap="small")
+        # [UI Fix] 左右分欄布局
+        c_p1, c_p2 = st.columns([1.3, 1], gap="small")
         
-        # 標題樣式統一
+        # 標題樣式 (統一)
         header_style = "font-size: 0.9rem; font-weight: 700; color: #333; margin-bottom: 2px;"
-
-        with c_main_L:
-            # 左上：標題 + 左下：狀態
+        
+        with c_p1:
             st.markdown(f"<div style='{header_style}'>專案存取 (Project I/O)</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='font-size: 0.8rem; color: #555; margin-top: 5px;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
+            # 狀態文字微調
+            st.markdown(f"<div style='font-size: 0.8rem; color: #555; margin-top: 2px;'>{config_loaded_msg}</div>", unsafe_allow_html=True)
             
-        with c_main_R:
-            # 右上：標題 + 右下：按鈕 (橫向並排)
-            c_label, c_btn = st.columns([1.8, 1])
-            with c_label:
-                # 調整 padding-top 讓文字跟按鈕垂直對齊
-                st.markdown(f"<div style='{header_style} padding-top: 6px; text-align: right;'>📂 載入專案設定 (.json)</div>", unsafe_allow_html=True)
-            with c_btn:
-                uploaded_proj = st.file_uploader("Upload", type=["json"], key="project_loader", label_visibility="collapsed")
+        with c_p2:
+            st.markdown(f"<div style='{header_style} padding-top: 6px; text-align: right;'>📂 載入專案設定 (.json)</div>", unsafe_allow_html=True)
+            uploaded_proj = st.file_uploader("Upload", type=["json"], key="project_loader", label_visibility="collapsed")
             
         if uploaded_proj is not None:
             if uploaded_proj != st.session_state['last_loaded_file']:
@@ -292,7 +289,7 @@ with col_header_R:
         
         st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
         
-        # 2. 存檔 (Save) - 使用正確的 Placeholder 變數名稱
+        # 2. 存檔 (Save) - 使用 Placeholder 佔位 (解決變數名稱問題)
         project_io_save_placeholder = st.empty()
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
